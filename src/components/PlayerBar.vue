@@ -117,27 +117,30 @@ function onTouchSeek(e: TouchEvent) {
       </div>
     </div>
 
-    <!-- 移动端：底部常驻进度条（触摸友好，带滑块圆点） -->
+    <!-- 移动端：底部常驻进度条（触摸友好，带滑块圆点）。
+         滑轨与时间必须是上下两行：同一行居中会让 12px 滑块压在时间文字上 -->
     <div
-      class="md:hidden px-3 pb-2"
+      class="md:hidden px-3 pt-2 pb-2"
       @click="onSeek"
       @touchstart="onTouchSeek"
     >
-      <div class="relative h-2.5 flex items-center cursor-pointer">
-        <div class="absolute inset-x-0 h-[4px] bg-white/15 rounded-full overflow-visible">
+      <!-- 滑轨行：容器高度 = 滑块高度，滑块完整落在行内不外溢 -->
+      <div class="relative h-3.5 flex items-center cursor-pointer">
+        <div class="absolute inset-x-0 h-1 bg-white/15 rounded-full">
           <div
             class="absolute left-0 top-0 h-full bg-white rounded-full"
             :style="{ width: progress + '%' }"
           >
             <span
-              class="absolute -right-1.5 -top-[5px] w-3 h-3 rounded-full bg-white shadow"
+              class="absolute -right-1.5 -top-1 w-3 h-3 rounded-full bg-white shadow"
             ></span>
           </div>
         </div>
-        <div class="flex justify-between w-full -mt-0.5 text-[10px] text-white/40 tabular-nums">
-          <span>{{ fmt(player.currentTime) }}</span>
-          <span>-{{ fmt(Math.max(0, player.duration - player.currentTime)) }}</span>
-        </div>
+      </div>
+      <!-- 时间行：与滑轨间隔 6px，滑块碰不到 -->
+      <div class="flex justify-between mt-1.5 text-[10px] text-white/40 tabular-nums">
+        <span>{{ fmt(player.currentTime) }}</span>
+        <span>-{{ fmt(Math.max(0, player.duration - player.currentTime)) }}</span>
       </div>
     </div>
   </div>
