@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  @apply bg-black text-white antialiased select-none;
+  font-family: var(--font-sans);
+}
+
+/* 细滚动条 */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  @apply bg-white/20 rounded-full;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 歌词滚动平滑 */
+.lyrics-scroll {
+  scroll-behavior: smooth;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 15%,
+    black 85%,
+    transparent 100%
+  );
+}
