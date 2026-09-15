@@ -21,6 +21,14 @@ function onSeek(e: MouseEvent) {
   const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
   player.seek(ratio * player.duration)
 }
+
+function onTouchSeek(e: TouchEvent) {
+  const el = e.currentTarget as HTMLElement
+  const r = el.getBoundingClientRect()
+  const x = e.touches[0].clientX
+  const ratio = Math.min(1, Math.max(0, (x - r.left) / r.width))
+  player.seek(ratio * player.duration)
+}
 </script>
 
 <template>
@@ -28,9 +36,9 @@ function onSeek(e: MouseEvent) {
     v-if="player.currentTrack"
     class="relative z-30 border-t border-white/10 bg-zinc-950/80 backdrop-blur-xl"
   >
-    <!-- 进度条（吸顶细条，Apple Music 风格） -->
+    <!-- 桌面端：顶部细进度条（hover 加深） -->
     <div
-      class="absolute -top-[3px] left-0 right-0 h-[6px] cursor-pointer group"
+      class="hidden md:block absolute -top-[3px] left-0 right-0 h-[6px] cursor-pointer group"
       @click="onSeek"
     >
       <div class="h-[3px] mt-[3px] bg-white/15 group-hover:h-[5px] group-hover:mt-[1px] transition-all">
@@ -38,13 +46,13 @@ function onSeek(e: MouseEvent) {
       </div>
     </div>
 
-    <div class="flex items-center gap-4 px-4 h-16">
-      <!-- 封面 + 信息（点击展开全屏） -->
+    <div class="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 h-14 sm:h-16">
+      <!-- 封面 + 信息（点击展开全屏；移动端占满剩余宽度） -->
       <button
-        class="flex items-center gap-3 min-w-0 w-64 text-left"
+        class="flex items-center gap-3 min-w-0 flex-1 md:flex-none md:w-64 text-left"
         @click="player.showNowPlaying = true"
       >
-        <div class="w-11 h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-lg">
+        <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-zinc-800 shrink-0 shadow-lg">
           <img
             v-if="player.currentTrack.meta?.coverUrl"
             :src="player.currentTrack.meta.coverUrl"
@@ -58,31 +66,31 @@ function onSeek(e: MouseEvent) {
         </div>
       </button>
 
-      <!-- 控制 -->
-      <div class="flex-1 flex items-center justify-center gap-6">
+      <!-- 控制区：移动端只留 prev/play/next，桌面端全量 -->
+      <div class="flex items-center justify-end sm:justify-center gap-3 sm:gap-6 shrink-0">
         <button
-          class="text-white/60 hover:text-white transition"
+          class="hidden sm:flex text-white/60 hover:text-white transition shrink-0"
           :class="{ 'text-red-500': player.shuffle }"
           @click="player.shuffle = !player.shuffle"
           title="随机播放"
         >
           <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
         </button>
-        <button class="text-white hover:text-white/70 transition" @click="player.prev" title="上一首">
-          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+        <button class="text-white hover:text-white/70 transition shrink-0" @click="player.prev" title="上一首">
+          <svg viewBox="0 0 24 24" class="w-6 h-6 sm:w-6 sm:h-6 fill-current"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
         </button>
         <button
-          class="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition"
+          class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition shrink-0"
           @click="player.togglePlay"
         >
-          <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-5 h-5 fill-current ml-0.5"><path d="M8 5v14l11-7z"/></svg>
-          <svg v-else viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5"><path d="M8 5v14l11-7z"/></svg>
+          <svg v-else viewBox="0 0 24 24" class="w-4 h-4 sm:w-5 sm:h-5 fill-current"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
         </button>
-        <button class="text-white hover:text-white/70 transition" @click="player.next()" title="下一首">
-          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+        <button class="text-white hover:text-white/70 transition shrink-0" @click="player.next()" title="下一首">
+          <svg viewBox="0 0 24 24" class="w-6 h-6 sm:w-6 sm:h-6 fill-current"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
         </button>
         <button
-          class="text-white/60 hover:text-white transition"
+          class="hidden sm:flex text-white/60 hover:text-white transition shrink-0"
           :class="{ 'text-red-500': player.repeat !== 'off' }"
           @click="player.cycleRepeat"
           title="循环"
@@ -92,20 +100,44 @@ function onSeek(e: MouseEvent) {
         </button>
       </div>
 
-      <!-- 时间 + 音量 -->
-      <div class="w-64 hidden md:flex items-center justify-end gap-3 text-xs text-white/50 tabular-nums">
+      <!-- 时间 + 音量（仅桌面） -->
+      <div class="hidden sm:flex w-52 lg:w-64 items-center justify-end gap-2 lg:gap-3 text-xs text-white/50 tabular-nums shrink-0">
         <span>{{ fmt(player.currentTime) }}</span>
-        <span>/</span>
-        <span>{{ fmt(player.duration) }}</span>
+        <span class="hidden lg:inline">/</span>
+        <span class="hidden lg:inline">{{ fmt(player.duration) }}</span>
         <input
           type="range"
           min="0"
           max="1"
           step="0.01"
           :value="player.volume"
-          class="w-20 accent-red-500"
+          class="hidden lg:block w-20 accent-red-500"
           @input="player.setVolume(parseFloat(($event.target as HTMLInputElement).value))"
         />
+      </div>
+    </div>
+
+    <!-- 移动端：底部常驻进度条（触摸友好，带滑块圆点） -->
+    <div
+      class="md:hidden px-3 pb-2"
+      @click="onSeek"
+      @touchstart="onTouchSeek"
+    >
+      <div class="relative h-2.5 flex items-center cursor-pointer">
+        <div class="absolute inset-x-0 h-[4px] bg-white/15 rounded-full overflow-visible">
+          <div
+            class="absolute left-0 top-0 h-full bg-white rounded-full"
+            :style="{ width: progress + '%' }"
+          >
+            <span
+              class="absolute -right-1.5 -top-[5px] w-3 h-3 rounded-full bg-white shadow"
+            ></span>
+          </div>
+        </div>
+        <div class="flex justify-between w-full -mt-0.5 text-[10px] text-white/40 tabular-nums">
+          <span>{{ fmt(player.currentTime) }}</span>
+          <span>-{{ fmt(Math.max(0, player.duration - player.currentTime)) }}</span>
+        </div>
       </div>
     </div>
   </div>
