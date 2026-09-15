@@ -82,11 +82,15 @@ function onSeek(e: MouseEvent) {
       <div class="w-9"></div>
     </div>
 
-    <!-- 主体：左封面右歌词 -->
-    <div class="relative z-10 flex-1 flex min-h-0 px-6 md:px-14 gap-10 pb-6">
-      <div class="flex flex-col justify-center flex-1 min-w-0 max-w-xl mx-auto md:mx-0">
+    <!-- 主体：窄屏上下排列（封面+控制在上、歌词在下），宽屏左右分栏 -->
+    <div
+      class="relative z-10 flex-1 flex flex-col md:flex-row min-h-0 px-6 md:px-14 gap-4 md:gap-10 pb-6"
+    >
+      <div
+        class="flex flex-col justify-center shrink-0 md:shrink md:flex-1 md:min-w-0 md:max-w-xl overflow-y-auto md:overflow-visible"
+      >
         <div
-          class="aspect-square w-full max-w-[420px] rounded-2xl overflow-hidden shadow-2xl shadow-black/60 mx-auto transition-transform duration-500"
+          class="aspect-square w-full max-w-[200px] md:max-w-[420px] rounded-2xl overflow-hidden shadow-2xl shadow-black/60 mx-auto transition-transform duration-500"
           :class="player.playing ? 'scale-100' : 'scale-90'"
         >
           <img v-if="cover" ref="coverEl" :src="cover" class="w-full h-full object-cover" />
@@ -145,8 +149,8 @@ function onSeek(e: MouseEvent) {
         </div>
       </div>
 
-      <!-- 歌词 -->
-      <div class="hidden md:block flex-1 min-w-0">
+      <!-- 歌词（窄屏在下方滚动，不再隐藏） -->
+      <div class="flex-1 min-h-0">
         <LyricsView />
       </div>
     </div>

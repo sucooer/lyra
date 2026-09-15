@@ -32,7 +32,7 @@ function jump(t: number) {
 <template>
   <div
     ref="container"
-    class="lyrics-scroll h-full overflow-y-auto px-6 py-[40%] space-y-5"
+    class="lyrics-scroll h-full overflow-y-auto px-6 py-[25%] md:py-[40%] space-y-5"
     @wheel="onUserScroll"
     @touchmove="onUserScroll"
   >
