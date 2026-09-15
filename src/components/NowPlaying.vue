@@ -4,7 +4,7 @@ import { usePlayerStore } from '../stores/player'
 import LyricsView from './LyricsView.vue'
 
 const player = usePlayerStore()
-const coverEl = ref<HTMLImageElement | null>(null)
+const showLyrics = ref(false)
 const bgColor = ref('rgb(30,30,32)')
 
 /** 从封面提取主色调（canvas 平均色，Apple Music 风格背景） */
@@ -69,8 +69,8 @@ function onSeek(e: MouseEvent) {
     />
     <div class="absolute inset-0 bg-black/30"></div>
 
-    <!-- 顶栏 -->
-    <div class="relative z-10 flex items-center justify-between px-6 pt-5">
+    <!-- 顶栏：收起 / 标题 / 歌词开关 -->
+    <div class="relative z-10 flex items-center justify-between px-5 md:px-8 pt-5">
       <button
         class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
         @click="player.showNowPlaying = false"
@@ -78,26 +78,35 @@ function onSeek(e: MouseEvent) {
       >
         <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
       </button>
-      <div class="text-xs uppercase tracking-widest text-white/60">正在播放</div>
-      <div class="w-9"></div>
+      <div class="text-xs uppercase tracking-widest text-white/60">
+        {{ showLyrics ? '歌词' : '正在播放' }}
+      </div>
+      <button
+        class="w-9 h-9 rounded-full flex items-center justify-center transition"
+        :class="showLyrics ? 'text-red-500' : 'text-white/70 hover:text-white'"
+        @click="showLyrics = !showLyrics"
+        title="歌词"
+      >
+        <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
+      </button>
     </div>
 
-    <!-- 主体：窄屏上下排列（封面+控制在上、歌词在下），宽屏左右分栏 -->
+    <!-- 封面视图 -->
     <div
-      class="relative z-10 flex-1 flex flex-col md:flex-row min-h-0 px-6 md:px-14 gap-4 md:gap-10 pb-6"
+      v-if="!showLyrics"
+      class="relative z-10 flex-1 min-h-0 flex flex-col overflow-y-auto px-6 md:px-14 pb-4"
     >
-      <div
-        class="flex flex-col justify-center shrink-0 md:shrink md:flex-1 md:min-w-0 md:max-w-xl overflow-y-auto md:overflow-visible"
-      >
+      <!-- my-auto：内容放得下时垂直居中，放不下时可滚动且不裁顶 -->
+      <div class="w-full max-w-md mx-auto my-auto">
         <div
-          class="aspect-square w-full max-w-[200px] md:max-w-[420px] rounded-2xl overflow-hidden shadow-2xl shadow-black/60 mx-auto transition-transform duration-500"
+          class="aspect-square w-full max-w-[220px] sm:max-w-[300px] md:max-w-[420px] mx-auto rounded-2xl overflow-hidden shadow-2xl shadow-black/60 transition-transform duration-500"
           :class="player.playing ? 'scale-100' : 'scale-90'"
         >
-          <img v-if="cover" ref="coverEl" :src="cover" class="w-full h-full object-cover" />
+          <img v-if="cover" :src="cover" class="w-full h-full object-cover" />
           <div v-else class="w-full h-full bg-zinc-800 flex items-center justify-center text-7xl text-white/20">♪</div>
         </div>
 
-        <div class="mt-7 text-center md:text-left">
+        <div class="mt-6 text-center">
           <div class="text-xl md:text-2xl font-bold truncate">{{ player.displayTitle }}</div>
           <div class="text-base md:text-lg text-white/60 truncate mt-0.5">
             {{ player.displayArtist }}
@@ -117,7 +126,7 @@ function onSeek(e: MouseEvent) {
         </div>
 
         <!-- 控制 -->
-        <div class="mt-3 flex items-center justify-center gap-8">
+        <div class="mt-4 flex items-center justify-center gap-8">
           <button class="text-white/70 hover:text-white transition" :class="{ 'text-red-500': player.shuffle }" @click="player.shuffle = !player.shuffle">
             <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
           </button>
@@ -137,8 +146,8 @@ function onSeek(e: MouseEvent) {
           </button>
         </div>
 
-        <!-- 音量 -->
-        <div class="mt-5 flex items-center gap-3 justify-center">
+        <!-- 音量（窄屏隐藏，避免挤压纵向空间） -->
+        <div class="hidden sm:flex mt-5 items-center gap-3 justify-center">
           <svg viewBox="0 0 24 24" class="w-4 h-4 fill-white/50"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
           <input
             type="range" min="0" max="1" step="0.01" :value="player.volume"
@@ -148,10 +157,23 @@ function onSeek(e: MouseEvent) {
           <svg viewBox="0 0 24 24" class="w-4 h-4 fill-white/50"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
         </div>
       </div>
+    </div>
 
-      <!-- 歌词（窄屏在下方滚动，不再隐藏） -->
-      <div class="flex-1 min-h-0">
-        <LyricsView />
+    <!-- 歌词视图（全屏滚动，底部保留进度条） -->
+    <div v-else class="relative z-10 flex-1 min-h-0 flex flex-col pb-3">
+      <LyricsView class="flex-1 min-h-0" />
+      <div class="px-6 md:px-14 pt-3 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-white/50 tabular-nums w-10">{{ fmt(player.currentTime) }}</span>
+          <div class="flex-1 h-1 bg-white/20 rounded-full cursor-pointer" @click="onSeek">
+            <div class="h-full bg-white/80 rounded-full" :style="{ width: progress + '%' }"></div>
+          </div>
+          <button class="text-white/80 hover:text-white transition shrink-0" @click="player.togglePlay" title="播放/暂停">
+            <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M8 5v14l11-7z"/></svg>
+            <svg v-else viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+          </button>
+          <span class="text-xs text-white/50 tabular-nums w-10 text-right">{{ fmt(player.duration) }}</span>
+        </div>
       </div>
     </div>
   </div>
