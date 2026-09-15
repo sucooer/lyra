@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "meta": "node scripts/gen-meta.mjs"
   },
   "dependencies": {
     "music-metadata": "^11.15.0",

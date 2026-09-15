@@ -121,7 +121,46 @@ function toMeta(ia: IAudioMetadata, coverUrl?: string): TrackMeta {
   }
 }
 
-function extractCover(ia: mm.IAudioMetadata): string | undefined {
+/**
+ * public/meta.json 中单条记录的结构（由 scripts/gen-meta.mjs 预生成）。
+ * 与 TrackMeta 的区别：封面是站点内的静态路径而非 blob URL。
+ */
+export interface CachedMeta {
+  title: string
+  artist: string
+  album: string
+  albumArtist?: string | null
+  year?: number | null
+  trackNo?: number | null
+  duration?: number | null
+  codec?: string | null
+  bitrate?: number | null
+  sampleRate?: number | null
+  /** 相对站点根的封面路径，如 /covers/xxxx.jpg */
+  cover?: string | null
+  lyrics: LyricLine[]
+  plainLyrics?: string | null
+}
+
+export function cachedToMeta(c: CachedMeta): TrackMeta {
+  return {
+    title: c.title,
+    artist: c.artist,
+    album: c.album,
+    albumArtist: c.albumArtist ?? undefined,
+    year: c.year ?? undefined,
+    trackNo: c.trackNo ?? undefined,
+    duration: c.duration ?? undefined,
+    codec: c.codec ?? undefined,
+    bitrate: c.bitrate ?? undefined,
+    sampleRate: c.sampleRate ?? undefined,
+    coverUrl: c.cover ?? undefined,
+    lyrics: c.lyrics ?? [],
+    plainLyrics: c.plainLyrics ?? undefined,
+  }
+}
+
+function extractCover(ia: IAudioMetadata): string | undefined {
   const pic = ia.common.picture?.[0]
   if (!pic) return undefined
   const blob = new Blob([pic.data], { type: pic.format || 'image/jpeg' })

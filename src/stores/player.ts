@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
-import { parseTrackMeta, fetchSidecarLrc, type TrackMeta } from '../lib/metadata'
+import {
+  parseTrackMeta,
+  fetchSidecarLrc,
+  cachedToMeta,
+  type TrackMeta,
+  type CachedMeta,
+} from '../lib/metadata'
 import type { LyricLine } from '../lib/lrc'
 import { setupMediaSession, updateMediaSession, updatePositionState } from '../lib/mediaSession'
 
@@ -16,9 +22,15 @@ export interface Track {
 export type RepeatMode = 'off' | 'all' | 'one'
 
 const PLAYLIST_URL = '/playlist.json'
+const META_URL = '/meta.json'
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+}
+
+/** 只回收运行时解析产生的 blob 封面；预生成的封面是普通路径，不能 revoke */
+function revokeCover(url?: string) {
+  if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
 }
 
 function filenameOf(url: string): string {
@@ -95,8 +107,11 @@ export const usePlayerStore = defineStore('player', {
       setupMediaSession(this)
     },
 
-    /** 批量添加直链 */
-    addUrls(urls: string[]) {
+    /**
+     * 批量添加直链
+     * @param cached 来自 public/meta.json 的预解析结果，命中则直接渲染、不再联网解析
+     */
+    addUrls(urls: string[], cached: Record<string, CachedMeta> = {}) {
       const added: Track[] = []
       for (const raw of urls) {
         const url = raw.trim()
@@ -104,10 +119,30 @@ export const usePlayerStore = defineStore('player', {
         if (this.tracks.some((t) => t.url === url)) continue
         // 必须用 reactive() 包一层：否则后续 loadMeta 拿到的是 raw 引用，
         // 对它的赋值不会触发界面更新（表现为永远"解析中…"）
-        added.push(reactive({ id: uid(), url, meta: null, lyrics: [], loading: true }))
+        const hit = cached[url]
+        added.push(
+          reactive({
+            id: uid(),
+            url,
+            meta: hit ? cachedToMeta(hit) : null,
+            lyrics: hit?.lyrics ?? [],
+            loading: !hit,
+          }),
+        )
       }
       this.tracks.push(...added)
-      for (const t of added) this.loadMeta(t)
+      for (const t of added) {
+        if (t.meta) {
+          // 预生成结果里没有歌词时，后台再试一次外挂 .lrc（不阻塞渲染）
+          if (t.lyrics.length === 0) {
+            fetchSidecarLrc(t.url).then((l) => {
+              if (l.length) t.lyrics = l
+            })
+          }
+        } else {
+          this.loadMeta(t)
+        }
+      }
     },
 
     async loadMeta(track: Track) {
@@ -208,7 +243,7 @@ export const usePlayerStore = defineStore('player', {
       const i = this.tracks.findIndex((t) => t.id === id)
       if (i < 0) return
       const t = this.tracks[i]
-      if (t.meta?.coverUrl) URL.revokeObjectURL(t.meta.coverUrl)
+      revokeCover(t.meta?.coverUrl)
       this.tracks.splice(i, 1)
       if (i === this.currentIndex) {
         this.audio?.pause()
@@ -221,7 +256,7 @@ export const usePlayerStore = defineStore('player', {
 
     clear() {
       for (const t of this.tracks) {
-        if (t.meta?.coverUrl) URL.revokeObjectURL(t.meta.coverUrl)
+        revokeCover(t.meta?.coverUrl)
       }
       this.tracks = []
       this.audio?.pause()
@@ -233,15 +268,30 @@ export const usePlayerStore = defineStore('player', {
       this.next(true)
     },
 
-    /** 从 public/playlist.json 读取歌单（歌单即文件，改动后刷新页面生效） */
+    /**
+     * 载入歌单：优先用 public/meta.json 的预解析结果（首屏即完整渲染，零等待），
+     * 未命中的条目才在后台联网解析。
+     * 改动 playlist.json 后，跑一次 `pnpm meta` 再刷新即可。
+     */
     async restore() {
       try {
-        const resp = await fetch(PLAYLIST_URL, { cache: 'no-store' })
-        if (!resp.ok) return
-        const data = await resp.json()
-        if (Array.isArray(data)) {
-          this.addUrls(data.filter((u: unknown) => typeof u === 'string'))
+        const [plResp, metaResp] = await Promise.all([
+          fetch(PLAYLIST_URL, { cache: 'no-store' }),
+          fetch(META_URL, { cache: 'no-store' }).catch(() => null),
+        ])
+        if (!plResp.ok) return
+        const data = await plResp.json()
+        if (!Array.isArray(data)) return
+
+        let cached: Record<string, CachedMeta> = {}
+        if (metaResp?.ok) {
+          try {
+            cached = (await metaResp.json())?.tracks ?? {}
+          } catch {
+            /* meta.json 损坏则全部走运行时解析 */
+          }
         }
+        this.addUrls(data.filter((u: unknown) => typeof u === 'string'), cached)
       } catch {
         /* ignore */
       }
