@@ -2,11 +2,9 @@
 import { onMounted } from 'vue'
 import { usePlayerStore } from './stores/player'
 import { setupShortcuts } from './lib/shortcuts'
-import Sidebar from './components/Sidebar.vue'
 import PlayerBar from './components/PlayerBar.vue'
 import NowPlaying from './components/NowPlaying.vue'
 import TrackList from './components/TrackList.vue'
-import AddTracks from './components/AddTracks.vue'
 
 const player = usePlayerStore()
 
@@ -19,16 +17,9 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col bg-black text-white overflow-hidden">
-    <div class="flex-1 flex min-h-0">
-      <Sidebar />
-      <main class="flex-1 min-w-0 flex flex-col overflow-y-auto pb-4">
-        <div class="px-6 pt-6 pb-4 flex items-center justify-between">
-          <h1 class="text-2xl font-bold tracking-tight">资料库</h1>
-          <AddTracks />
-        </div>
-        <TrackList />
-      </main>
-    </div>
+    <main class="flex-1 min-h-0 overflow-y-auto pb-4 pt-6">
+      <TrackList />
+    </main>
     <PlayerBar />
     <Transition name="now-playing">
       <NowPlaying v-if="player.showNowPlaying" />

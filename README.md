@@ -4,12 +4,12 @@
 
 ## 功能
 
-- 🎵 **直链播放**：粘贴音频直链（FLAC / MP3 / M4A / OGG / WAV）批量添加到资料库
+- 🎵 **直链播放**：在 `public/playlist.json` 里填写音频直链（FLAC / MP3 / M4A / OGG / WAV），刷新即加载
+- 📝 **歌单即文件**：歌单就是仓库里的 `public/playlist.json`，一行一个 url，无界面管理
 - 🏷️ **元数据解析**：浏览器端用 `music-metadata-browser` 解析内嵌封面、标题、歌手、专辑、歌词（ID3v2 / Vorbis Comment / MP4 atom）
 - ⚡ **Range 分块**：元数据解析只下载文件头部（默认 2MB），40MB FLAC 秒开信息
 - 📜 **滚动歌词**：内嵌 LRC / SYLT 同步歌词逐行高亮滚动，支持点击跳转；自动尝试同路径 `.lrc` 外挂歌词
 - 🍎 **Apple Music 风格**：全屏播放页、封面主色调提取模糊背景、底部迷你播放栏、播放/暂停缩放动画
-- 💾 **歌单持久化**：localStorage 保存 + JSON 导入导出
 - 🌐 **CORS 兜底**：直链无跨域头时自动回落 `/api/proxy` 中转（同时支持 Range 透传）
 
 ## 部署

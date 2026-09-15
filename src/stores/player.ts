@@ -14,7 +14,7 @@ export interface Track {
 
 export type RepeatMode = 'off' | 'all' | 'one'
 
-const STORAGE_KEY = 'amp.playlist.v1'
+const PLAYLIST_URL = '/playlist.json'
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -104,7 +104,6 @@ export const usePlayerStore = defineStore('player', {
         added.push({ id: uid(), url, meta: null, lyrics: [], loading: true })
       }
       this.tracks.push(...added)
-      this.persist()
       for (const t of added) this.loadMeta(t)
     },
 
@@ -215,7 +214,6 @@ export const usePlayerStore = defineStore('player', {
       } else if (i < this.currentIndex) {
         this.currentIndex--
       }
-      this.persist()
     },
 
     clear() {
@@ -226,32 +224,24 @@ export const usePlayerStore = defineStore('player', {
       this.audio?.pause()
       this.currentIndex = -1
       this.playing = false
-      this.persist()
     },
 
     onEnded() {
       this.next(true)
     },
 
-    persist() {
-      // 只持久化 url 列表，元数据每次会话重新解析
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.tracks.map((t) => t.url)))
-    },
-
-    restore() {
+    /** 从 public/playlist.json 读取歌单（歌单即文件，改动后刷新页面生效） */
+    async restore() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (raw) {
-          const urls = JSON.parse(raw)
-          if (Array.isArray(urls)) this.addUrls(urls)
+        const resp = await fetch(PLAYLIST_URL, { cache: 'no-store' })
+        if (!resp.ok) return
+        const data = await resp.json()
+        if (Array.isArray(data)) {
+          this.addUrls(data.filter((u: unknown) => typeof u === 'string'))
         }
       } catch {
         /* ignore */
       }
-    },
-
-    exportJson(): string {
-      return JSON.stringify(this.tracks.map((t) => t.url), null, 2)
     },
   },
 })

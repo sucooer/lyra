@@ -35,7 +35,7 @@ function click(t: Track, i: number) {
       class="mt-20 text-center text-white/30 text-sm space-y-2"
     >
       <div class="text-5xl">🎵</div>
-      <div>资料库是空的，点右上角「添加」粘贴音乐直链</div>
+      <div>歌单是空的，编辑 public/playlist.json 添加歌曲直链后刷新</div>
     </div>
 
     <div
