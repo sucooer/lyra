@@ -4,7 +4,7 @@
  * - CORS 失败自动回落到 /api/proxy 中转
  * - 解析内嵌封面 / 歌词 / 标题 / 歌手 / 专辑等
  */
-import * as mm from 'music-metadata-browser'
+import { parseBlob, type IAudioMetadata } from 'music-metadata'
 import { looksLikeLrc, parseLrc, type LyricLine } from './lrc'
 
 export interface TrackMeta {
@@ -74,7 +74,7 @@ function mimeFromUrl(url: string): string | undefined {
   return ext ? map[ext] : undefined
 }
 
-function toMeta(ia: mm.IAudioMetadata, coverUrl?: string): TrackMeta {
+function toMeta(ia: IAudioMetadata, coverUrl?: string): TrackMeta {
   const c = ia.common
   let lyrics: LyricLine[] = []
   let plainLyrics: string | undefined
@@ -83,14 +83,13 @@ function toMeta(ia: mm.IAudioMetadata, coverUrl?: string): TrackMeta {
   if (c.lyrics) {
     for (const l of c.lyrics) {
       if (typeof l === 'string') lyricTexts.push(l)
-      else if (l.text) lyricTexts.push(l.text)
       else if (Array.isArray(l.syncText) && l.syncText.length) {
         // 内嵌同步歌词（SYLT）
         lyrics = l.syncText
           .filter((s) => s.timestamp !== undefined)
           .map((s) => ({ time: (s.timestamp as number) / 1000, text: s.text }))
           .sort((a, b) => a.time - b.time)
-      }
+      } else if (l.text) lyricTexts.push(l.text)
     }
   }
   if (lyrics.length === 0) {
@@ -143,7 +142,7 @@ export async function parseTrackMeta(url: string, filename = ''): Promise<TrackM
       let { blob, total } = await fetchRange(url, 0, RANGE_HEAD_SIZE - 1, useProxy)
       const mime = mimeFromUrl(url)
       try {
-        const ia = await mm.parseBlob(blob, {
+        const ia = await parseBlob(blob, {
           mimeType: mime,
           duration: true,
           skipCovers: false,
@@ -153,7 +152,7 @@ export async function parseTrackMeta(url: string, filename = ''): Promise<TrackM
         // 头部不够（封面太大或元数据靠后），扩大到 12MB 再试一次
         if (total > RANGE_HEAD_SIZE && blob.size < total) {
           blob = (await fetchRange(url, 0, Math.min(total - 1, RANGE_MAX_SIZE - 1), useProxy)).blob
-          const ia = await mm.parseBlob(blob, {
+          const ia = await parseBlob(blob, {
             mimeType: mime,
             duration: true,
             skipCovers: false,

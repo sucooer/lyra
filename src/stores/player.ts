@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { reactive } from 'vue'
 import { parseTrackMeta, fetchSidecarLrc, type TrackMeta } from '../lib/metadata'
 import type { LyricLine } from '../lib/lrc'
 import { setupMediaSession, updateMediaSession, updatePositionState } from '../lib/mediaSession'
@@ -101,7 +102,9 @@ export const usePlayerStore = defineStore('player', {
         const url = raw.trim()
         if (!/^https?:\/\//i.test(url)) continue
         if (this.tracks.some((t) => t.url === url)) continue
-        added.push({ id: uid(), url, meta: null, lyrics: [], loading: true })
+        // 必须用 reactive() 包一层：否则后续 loadMeta 拿到的是 raw 引用，
+        // 对它的赋值不会触发界面更新（表现为永远"解析中…"）
+        added.push(reactive({ id: uid(), url, meta: null, lyrics: [], loading: true }))
       }
       this.tracks.push(...added)
       for (const t of added) this.loadMeta(t)
