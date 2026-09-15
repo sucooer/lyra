@@ -141,9 +141,16 @@ function toCached(meta, coverRelPath) {
 }
 
 async function main() {
-  const urls = JSON.parse(await readFile(PLAYLIST, 'utf8')).filter(
-    (u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim()),
-  )
+  let urls
+  try {
+    urls = JSON.parse(await readFile(PLAYLIST, 'utf8')).filter(
+      (u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim()),
+    )
+  } catch (e) {
+    // 读不了歌单不能挡构建（部署平台跑 build 时尤其如此），警告后跳过
+    console.warn('[gen-meta] 读取 playlist.json 失败，跳过预生成：', e?.message ?? e)
+    return
+  }
   if (urls.length === 0) {
     console.log('playlist.json 里没有有效直链')
     return

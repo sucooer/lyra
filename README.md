@@ -7,20 +7,21 @@
 - 🎵 **直链播放**：在 `public/playlist.json` 里填写音频直链（FLAC / MP3 / M4A / OGG / WAV），刷新即加载
 - 📝 **歌单即文件**：歌单就是仓库里的 `public/playlist.json`，一行一个 url，无界面管理
 - 🏷️ **元数据解析**：浏览器端用 `music-metadata` v11 解析内嵌封面、标题、歌手、专辑、歌词（ID3v2 / Vorbis Comment / MP4 atom）
-- ⚡ **预解析缓存**：`pnpm meta` 预先把元数据落盘为 `public/meta.json` + `public/covers/`，首页直接渲染，不再联网解析
+- ⚡ **预解析缓存**：构建时自动生成 `public/meta.json` + `public/covers/`（已 gitignore，不入库），首页直接渲染，不再联网解析
 - ⚡ **Range 分块**：未预解析的条目在浏览器端按需解析，只下载文件头部（默认 2MB），40MB FLAC 秒开信息
-- 📜 **滚动歌词**：内嵌 LRC / SYLT 同步歌词逐行高亮滚动，支持点击跳转；自动尝试同路径 `.lrc` 外挂歌词。窄屏在封面下方显示，宽屏在右侧分栏
+- 📜 **滚动歌词**：内嵌 LRC / SYLT 同步歌词逐行高亮滚动，支持点击跳转；自动尝试同路径 `.lrc` 外挂歌词。播放页右上角引号按钮切换歌词视图
 - 🍎 **Apple Music 风格**：全屏播放页、封面主色调提取模糊背景、底部迷你播放栏、播放/暂停缩放动画
 - 🌐 **CORS 兜底**：直链无跨域头时自动回落 `/api/proxy` 中转（同时支持 Range 透传）
 
 ## 更新歌单
 
 1. 编辑 `public/playlist.json`，往数组里加音频直链（字符串数组，中文文件名需百分号编码）
-2. 跑一次 `pnpm meta` —— 解析新增条目并写入 `public/meta.json`、把封面存到 `public/covers/`
-3. 刷新页面
+2. `npm run build` 会自动先跑 `scripts/gen-meta.mjs` 解析新增条目（增量，已缓存的跳过）
+3. 本地开发想即时预览，可手动跑一次 `pnpm meta` 再刷新页面
 
-`pnpm meta` 是增量的，已有条目不会重复解析；想强制重跑加 `--force`，只重跑某一条用 `--only <下标>`。
-不跑这一步也能用，但那些歌要等浏览器端联网解析完才显示信息（音源慢时会卡在「解析中…」）。
+`meta.json` / `covers/` 都在 `.gitignore` 里，不会提交到仓库；部署时由构建步骤现生成。
+强制全量重跑：`node scripts/gen-meta.mjs --force`；只重跑某一条：`--only <下标>`。
+某条解析失败不影响构建，该曲目会退回浏览器端解析。
 
 ## 部署
 

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/gen-meta.mjs && vite build",
     "preview": "vite preview",
     "meta": "node scripts/gen-meta.mjs"
   },
