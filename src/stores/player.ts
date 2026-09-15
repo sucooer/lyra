@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { parseTrackMeta, fetchSidecarLrc, type TrackMeta } from '../lib/metadata'
 import type { LyricLine } from '../lib/lrc'
+import { setupMediaSession, updateMediaSession, updatePositionState } from '../lib/mediaSession'
 
 export interface Track {
   id: string
@@ -65,13 +66,20 @@ export const usePlayerStore = defineStore('player', {
       a.crossOrigin = 'anonymous'
       a.addEventListener('timeupdate', () => {
         this.currentTime = a.currentTime
+        updatePositionState(this)
       })
       a.addEventListener('loadedmetadata', () => {
         this.duration = a.duration
       })
       a.addEventListener('ended', () => this.onEnded())
-      a.addEventListener('play', () => (this.playing = true))
-      a.addEventListener('pause', () => (this.playing = false))
+      a.addEventListener('play', () => {
+        this.playing = true
+        updateMediaSession(this)
+      })
+      a.addEventListener('pause', () => {
+        this.playing = false
+        updateMediaSession(this)
+      })
       a.addEventListener('error', () => {
         // 直连音频加载失败时，走代理重载一次
         const cur = this.currentTrack
@@ -83,6 +91,7 @@ export const usePlayerStore = defineStore('player', {
       })
       a.volume = this.volume
       this.audio = a
+      setupMediaSession(this)
     },
 
     /** 批量添加直链 */
@@ -131,6 +140,7 @@ export const usePlayerStore = defineStore('player', {
       a.currentTime = 0
       this.currentTime = 0
       this.duration = t.meta?.duration ?? 0
+      updateMediaSession(this)
       a.play().catch(() => {})
     },
 

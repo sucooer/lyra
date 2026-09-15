@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { usePlayerStore } from './stores/player'
+import { setupShortcuts } from './lib/shortcuts'
 import Sidebar from './components/Sidebar.vue'
 import PlayerBar from './components/PlayerBar.vue'
 import NowPlaying from './components/NowPlaying.vue'
@@ -12,6 +13,7 @@ const player = usePlayerStore()
 onMounted(() => {
   player.initAudio()
   player.restore()
+  setupShortcuts(player)
 })
 </script>
 
