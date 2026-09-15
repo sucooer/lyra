@@ -56,7 +56,9 @@ function onSeek(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex flex-col overflow-hidden">
+  <!-- h-[100dvh] 而非 inset-0：移动端浏览器底部工具栏会盖住 100vh 的最后一截，
+       dvh 跟随可视视口，进度条时间不再被裁 -->
+  <div class="fixed inset-x-0 top-0 z-50 flex h-[100dvh] flex-col overflow-hidden">
     <!-- 背景：封面主色调 + 模糊层 -->
     <div
       class="absolute inset-0 transition-colors duration-1000"
@@ -94,7 +96,7 @@ function onSeek(e: MouseEvent) {
     <!-- 封面视图 -->
     <div
       v-if="!showLyrics"
-      class="relative z-10 flex-1 min-h-0 flex flex-col overflow-y-auto px-6 md:px-14 pb-4"
+      class="relative z-10 flex-1 min-h-0 flex flex-col overflow-y-auto px-6 md:px-14 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
     >
       <!-- my-auto：内容放得下时垂直居中，放不下时可滚动且不裁顶 -->
       <div class="w-full max-w-md mx-auto my-auto">
@@ -160,7 +162,7 @@ function onSeek(e: MouseEvent) {
     </div>
 
     <!-- 歌词视图（全屏滚动，底部保留进度条） -->
-    <div v-else class="relative z-10 flex-1 min-h-0 flex flex-col pb-3">
+    <div v-else class="relative z-10 flex-1 min-h-0 flex flex-col pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <LyricsView class="flex-1 min-h-0" />
       <div class="px-6 md:px-14 pt-3 shrink-0">
         <div class="flex items-center gap-3">

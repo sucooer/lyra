@@ -16,7 +16,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-black text-white overflow-hidden">
+  <!-- 100dvh：移动端浏览器工具栏不占可视高度，底部播放栏不会被裁 -->
+  <div class="h-[100dvh] flex flex-col bg-black text-white overflow-hidden">
     <main class="flex-1 min-h-0 overflow-y-auto pb-4 pt-6">
       <TrackList />
     </main>
