@@ -1,2 +1,5 @@
 onlyBuiltDependencies:
   - esbuild
+  # ffmpeg-static 的二进制靠 postinstall 下载，pnpm 10 默认拦截，必须显式放行，
+  # 否则部署平台（Cloudflare Pages 构建镜像里没有 ffmpeg）压不了封面。
+  - ffmpeg-static

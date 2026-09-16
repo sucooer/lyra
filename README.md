@@ -63,8 +63,12 @@
 
 **封面会压到长边 800px**：原图动辄 2048×2048 / 800KB，而界面里最大只显示到约 300px，
 压完单张 40~80KB（本仓库 5 张从 1657KB 降到 315KB，少 81%）。这一步用 `ffmpeg`，
-**属可选优化**：机器上没装就按原图落盘，其余流程完全不受影响；装在非标准位置时用
-环境变量 `FFMPEG_PATH` 指定。上限和质量在 `scripts/gen-meta.mjs` 顶部
+**属可选优化**：找不到就按原图落盘，其余流程完全不受影响。ffmpeg 依次从
+环境变量 `FFMPEG_PATH` → 系统 `PATH` → 依赖里的 `ffmpeg-static` 里找：
+开发机一般走系统装的那份，部署平台走 `ffmpeg-static` —— Cloudflare Pages 的构建镜像
+不含 ffmpeg，只能把二进制当依赖装下来。注意该包的二进制由它自己的 postinstall 下载，
+pnpm 10 默认拦截依赖脚本，所以已在 `pnpm-workspace.yaml` 的 `onlyBuiltDependencies` 里放行。
+上限和质量在 `scripts/gen-meta.mjs` 顶部
 （`MAX_COVER_EDGE` / `COVER_QUALITY`）。已经压过的图不会重复压缩
 （脚本自己读文件头判断尺寸，不为「要不要压」多走一次有损转换）。
 升级时同样的道理：已有的封面会就地重压，不需要重新下载音频。

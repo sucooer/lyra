@@ -13,8 +13,10 @@
  * 每次运行结束会清掉 covers/ 与 lyrics/ 里不再被 meta.json 引用的文件。
  *
  * 封面长边压到 MAX_COVER_EDGE 以内（原图动辄 2048px / 800KB，界面里最多显示到约 300px）。
- * 这一步用 ffmpeg，属可选优化：本机没装就按原图落盘，其余流程不受影响。
- * 自定义 ffmpeg 位置：环境变量 FFMPEG_PATH。
+ * 这一步用 ffmpeg，属可选优化：找不到就按原图落盘，其余流程不受影响。
+ * 查找顺序：环境变量 FFMPEG_PATH → 系统 PATH 上的 ffmpeg → 依赖里的 ffmpeg-static。
+ * 最后一条是给部署平台的：Cloudflare Pages 的构建镜像里没有 ffmpeg，只能靠
+ * ffmpeg-static 的 postinstall 把二进制装下来，才能在构建期把封面压小。
  *
  * 用法：
  *   node scripts/gen-meta.mjs            # 只解析 meta.json 里缺失的条目
@@ -83,15 +85,44 @@ function coverName(data, format) {
 }
 
 /**
- * ffmpeg 只用来压封面，属可选优化：找不到就按原图落盘，构建照常，不做任何提示以外的动作。
- * 有特殊安装位置时用环境变量 FFMPEG_PATH 指过去。
+ * ffmpeg 只用来压封面，属可选优化：找不到就按原图落盘，构建照常。
+ * 「能不能跑起来」才算数 —— 文件存在不代表可用，所以一律 spawn 一次 -version 探活。
  */
-const ffmpegBin = [process.env.FFMPEG_PATH, 'ffmpeg']
-  .filter(Boolean)
-  .find((bin) => {
-    const r = spawnSync(bin, ['-version'], { stdio: 'ignore' })
-    return !r.error && r.status === 0
-  }) ?? null
+function ffmpegWorks(bin) {
+  if (typeof bin !== 'string' || bin.length === 0) return false
+  const r = spawnSync(bin, ['-version'], { stdio: 'ignore' })
+  return !r.error && r.status === 0
+}
+
+/**
+ * 按 环境变量 → 系统安装 → 依赖自带 的顺序找一个能用的 ffmpeg：
+ *   1. FFMPEG_PATH：本机装在奇怪位置时手动指定
+ *   2. 系统 PATH 上的 ffmpeg：开发机通常走这条
+ *   3. ffmpeg-static：部署平台（Cloudflare Pages 构建镜像不含 ffmpeg）的兜底，
+ *      二进制由该包的 postinstall 下载 —— pnpm 10 默认拦截依赖脚本，
+ *      需在 pnpm-workspace.yaml 的 onlyBuiltDependencies 里放行，否则装了也是空壳。
+ * 都没有就返回 null，调用方按原图落盘。
+ */
+async function resolveFfmpeg() {
+  for (const bin of [process.env.FFMPEG_PATH, 'ffmpeg']) {
+    if (bin && ffmpegWorks(bin)) return bin
+  }
+  try {
+    const mod = await import('ffmpeg-static')
+    const bin = mod.default ?? mod
+    if (ffmpegWorks(bin)) {
+      // 明确报出来源：本地有系统 ffmpeg 时不会走到这里，构建日志里能一眼看出兜底有没有生效
+      console.log('ffmpeg：系统里没有，改用依赖自带的 ffmpeg-static')
+      return bin
+    }
+    console.warn('  ! ffmpeg-static 装上了但二进制不可用（构建脚本可能被包管理器拦截），封面按原图落盘')
+  } catch {
+    // 没装这个包属正常情况，本地有系统 ffmpeg 就够
+  }
+  return null
+}
+
+const ffmpegBin = await resolveFfmpeg()
 
 /**
  * 只从文件头读图片尺寸（封面基本只有 JPEG / PNG 两种）。
