@@ -9,6 +9,13 @@ import {
 } from '../lib/metadata'
 import type { LyricLine } from '../lib/lrc'
 import { setupMediaSession, updateMediaSession, updatePositionState } from '../lib/mediaSession'
+import { filenameOf } from '../lib/track'
+import {
+  normalizePlaylists,
+  playlistMatches,
+  isRadio,
+  type PlaylistDef,
+} from '../lib/playlists'
 
 export interface Track {
   id: string
@@ -19,10 +26,18 @@ export interface Track {
   error?: string
 }
 
+/** 解析后的歌单：定义 + 当前命中的曲目 */
+export interface Collection {
+  def: PlaylistDef
+  tracks: Track[]
+  isRadio: boolean
+}
+
 export type RepeatMode = 'off' | 'all' | 'one'
 
 const PLAYLIST_URL = '/playlist.json'
 const META_URL = '/meta.json'
+const LISTS_URL = '/playlists.json'
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -31,15 +46,6 @@ function uid(): string {
 /** 只回收运行时解析产生的 blob 封面；预生成的封面是普通路径，不能 revoke */
 function revokeCover(url?: string) {
   if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
-}
-
-function filenameOf(url: string): string {
-  try {
-    const p = decodeURIComponent(new URL(url).pathname)
-    return p.split('/').pop() ?? url
-  } catch {
-    return url.split('/').pop() ?? url
-  }
 }
 
 export const usePlayerStore = defineStore('player', {
@@ -58,6 +64,15 @@ export const usePlayerStore = defineStore('player', {
     /** 「接下来播放」队列：存 track id，按顺序优先于列表顺序播放 */
     upNext: [] as string[],
     audio: null as HTMLAudioElement | null,
+
+    /** public/playlists.json 里定义的歌单与电台 */
+    playlists: [] as PlaylistDef[],
+    /** 播放上下文：当前歌单/电台的曲目 id 顺序；空数组 = 整个资料库 */
+    context: [] as string[],
+    /** 上下文名称，用于在界面上说明「正在播放哪个歌单」 */
+    contextLabel: '',
+    /** 电台封面的随机种子：每次点电台都换一张新封面 */
+    radioSeed: 20260916,
   }),
 
   getters: {
@@ -72,6 +87,40 @@ export const usePlayerStore = defineStore('player', {
     },
     displayArtist(): string {
       return this.currentTrack?.meta?.artist || '未知艺术家'
+    },
+
+    /**
+     * 解析所有歌单：电台收全部曲目，普通歌单按匹配规则筛选，
+     * 一首都没命中的歌单直接隐藏（避免出现空卡片）。
+     */
+    collections(state): Collection[] {
+      return state.playlists
+        .map((def) => {
+          const isR = isRadio(def)
+          return {
+            def,
+            isRadio: isR,
+            tracks: isR ? state.tracks : state.tracks.filter((t) => playlistMatches(def, t)),
+          }
+        })
+        .filter((c) => c.tracks.length > 0)
+    },
+    radioCollection(): Collection | null {
+      return this.collections.find((c) => c.isRadio) ?? null
+    },
+    /** 首页推荐网格（不含电台，电台单独做成横幅） */
+    playlistCards(): Collection[] {
+      return this.collections.filter((c) => !c.isRadio)
+    },
+
+    /**
+     * 当前播放顺序：有歌单上下文就在歌单内循环，否则是整个资料库。
+     * 顺带过滤已被移除的曲目。
+     */
+    playOrder(state): string[] {
+      const ids = state.context.length ? state.context : state.tracks.map((t) => t.id)
+      if (!state.context.length) return ids
+      return ids.filter((id) => state.tracks.some((t) => t.id === id))
     },
   },
 
@@ -198,6 +247,52 @@ export const usePlayerStore = defineStore('player', {
       a.play().catch(() => {})
     },
 
+    /** 按 track id 播放（歌单详情页用，不改变播放上下文） */
+    playId(id: string) {
+      const i = this.tracks.findIndex((t) => t.id === id)
+      if (i >= 0) this.play(i)
+    },
+
+    /** 从「资料库」列表点播：退出歌单上下文，回到整个资料库顺序 */
+    playFromLibrary(id: string) {
+      this.context = []
+      this.contextLabel = ''
+      this.playId(id)
+    },
+
+    /**
+     * 设定播放上下文（歌单/电台），顺带清掉「接下来播放」残留队列，
+     * 否则上一张歌单排队的曲目会串到新歌单里。
+     */
+    setContext(ids: string[], label: string) {
+      this.context = ids.filter((id) => this.tracks.some((t) => t.id === id))
+      this.contextLabel = label
+    },
+
+    /** 顺序播放整个歌单 */
+    playCollection(ids: string[], label: string, opts: { shuffle?: boolean } = {}) {
+      this.setContext(ids, label)
+      this.upNext = []
+      if (opts.shuffle !== undefined) this.shuffle = opts.shuffle
+      const order = this.playOrder
+      if (!order.length) return
+      this.playId(this.shuffle ? order[Math.floor(Math.random() * order.length)] : order[0])
+    },
+
+    /** 电台：全部歌曲随机播放 + 循环（永不停止），并换一张新封面 */
+    playRadio() {
+      this.radioSeed = (Math.random() * 0xffffffff) >>> 0
+      const ids = this.tracks.map((t) => t.id)
+      this.setContext(ids, '无限电台')
+      this.upNext = []
+      this.shuffle = true
+      // repeat = 'all'：随机取曲也不会撞到「放完就停」的分支，实现无限播放
+      this.repeat = 'all'
+      const order = this.playOrder
+      if (!order.length) return
+      this.playId(order[Math.floor(Math.random() * order.length)])
+    },
+
     togglePlay() {
       if (!this.audio) {
         if (this.tracks.length > 0) this.play(0)
@@ -225,14 +320,18 @@ export const usePlayerStore = defineStore('player', {
         }
         // 目标已被删除则继续往下走
       }
+
+      const order = this.playOrder
+      if (order.length === 0) return
+      const cur = order.indexOf(this.currentTrack?.id ?? '')
       let idx: number
-      if (this.shuffle && this.tracks.length > 1) {
+      if (this.shuffle && order.length > 1) {
         do {
-          idx = Math.floor(Math.random() * this.tracks.length)
-        } while (idx === this.currentIndex)
+          idx = Math.floor(Math.random() * order.length)
+        } while (idx === cur)
       } else {
-        idx = this.currentIndex + 1
-        if (idx >= this.tracks.length) {
+        idx = cur + 1
+        if (idx >= order.length) {
           if (this.repeat === 'off' && auto) {
             this.playing = false
             return
@@ -240,7 +339,7 @@ export const usePlayerStore = defineStore('player', {
           idx = 0
         }
       }
-      this.play(idx)
+      this.playId(order[idx])
     },
 
     prev() {
@@ -249,8 +348,11 @@ export const usePlayerStore = defineStore('player', {
         this.audio.currentTime = 0
         return
       }
-      const idx = this.currentIndex - 1
-      this.play(idx < 0 ? this.tracks.length - 1 : idx)
+      const order = this.playOrder
+      if (order.length === 0) return
+      const cur = order.indexOf(this.currentTrack?.id ?? '')
+      const idx = (cur <= 0 ? order.length : cur) - 1
+      this.playId(order[idx])
     },
 
     seek(sec: number) {
@@ -288,6 +390,7 @@ export const usePlayerStore = defineStore('player', {
       const i = this.tracks.findIndex((t) => t.id === id)
       if (i < 0) return
       this.upNext = this.upNext.filter((x) => x !== id)
+      this.context = this.context.filter((x) => x !== id)
       const t = this.tracks[i]
       revokeCover(t.meta?.coverUrl)
       this.tracks.splice(i, 1)
@@ -306,6 +409,8 @@ export const usePlayerStore = defineStore('player', {
       }
       this.tracks = []
       this.upNext = []
+      this.context = []
+      this.contextLabel = ''
       this.audio?.pause()
       this.currentIndex = -1
       this.playing = false
@@ -322,9 +427,10 @@ export const usePlayerStore = defineStore('player', {
      */
     async restore() {
       try {
-        const [plResp, metaResp] = await Promise.all([
+        const [plResp, metaResp, listsResp] = await Promise.all([
           fetch(PLAYLIST_URL, { cache: 'no-store' }),
           fetch(META_URL, { cache: 'no-store' }).catch(() => null),
+          fetch(LISTS_URL, { cache: 'no-store' }).catch(() => null),
         ])
         if (!plResp.ok) return
         const data = await plResp.json()
@@ -339,6 +445,15 @@ export const usePlayerStore = defineStore('player', {
           }
         }
         this.addUrls(data.filter((u: unknown) => typeof u === 'string'), cached)
+
+        this.radioSeed = (Math.random() * 0xffffffff) >>> 0
+        if (listsResp?.ok) {
+          try {
+            this.playlists = normalizePlaylists(await listsResp.json())
+          } catch {
+            /* playlists.json 损坏则只显示资料库列表 */
+          }
+        }
       } catch {
         /* ignore */
       } finally {

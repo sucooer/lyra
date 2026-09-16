@@ -1,0 +1,32 @@
+[
+  {
+    "id": "radio",
+    "type": "radio",
+    "title": "无限电台",
+    "subtitle": "资料库全部歌曲 · 随机无限播放"
+  },
+  {
+    "id": "chill",
+    "title": "一个人静静",
+    "subtitle": "抒情慢歌",
+    "artists": ["Enya", "M2M"]
+  },
+  {
+    "id": "mayday",
+    "title": "五月天摇滚",
+    "subtitle": "青春热血",
+    "artists": ["五月天"]
+  },
+  {
+    "id": "jpop",
+    "title": "日系小清新",
+    "subtitle": "你可能喜欢的歌单",
+    "artists": ["高木さん(CV:高橋李依)", "『ユイカ』", "FRUITS ZIPPER"]
+  },
+  {
+    "id": "all",
+    "title": "全部歌曲",
+    "subtitle": "资料库",
+    "all": true
+  }
+]

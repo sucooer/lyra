@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { usePlayerStore } from './stores/player'
 import { setupShortcuts } from './lib/shortcuts'
 import { initTheme, cycleTheme, themeMode, resolvedDark, themeLabel } from './lib/theme'
+import { activePlaylistId, goHome } from './lib/nav'
 import PlayerBar from './components/PlayerBar.vue'
 import NowPlaying from './components/NowPlaying.vue'
-import TrackList from './components/TrackList.vue'
+import Home from './components/Home.vue'
+import PlaylistView from './components/PlaylistView.vue'
+import TrackMenu from './components/TrackMenu.vue'
 
 const player = usePlayerStore()
+
+const current = computed(() =>
+  activePlaylistId.value
+    ? (player.collections.find((c) => c.def.id === activePlaylistId.value) ?? null)
+    : null,
+)
+const headerTitle = computed(() => (current.value ? current.value.def.title : '音乐'))
 
 onMounted(() => {
   initTheme()
@@ -20,22 +30,37 @@ onMounted(() => {
 <template>
   <!-- 100dvh：移动端浏览器工具栏不占可视高度，底部播放栏不会被裁 -->
   <div class="h-[100dvh] flex flex-col bg-app text-fg overflow-hidden">
-    <header class="shrink-0 flex items-center justify-between px-6 pt-5 pb-2">
-      <h1 class="text-xl font-semibold tracking-tight">歌曲</h1>
+    <header class="shrink-0 flex items-center gap-2 px-4 sm:px-6 pt-5 pb-2">
       <button
-        class="w-9 h-9 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
+        v-if="activePlaylistId"
+        class="w-9 h-9 -ml-1 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
+        title="返回"
+        @click="goHome"
+      >
+        <svg viewBox="0 0 24 24" class="w-5 h-5">
+          <path
+            d="M15 5 8 12l7 7"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+
+      <h1 class="flex-1 min-w-0 truncate text-xl font-semibold tracking-tight">
+        {{ headerTitle }}
+      </h1>
+
+      <button
+        class="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
         :title="themeLabel"
         @click="cycleTheme"
       >
         <!-- 跟随系统：半阴半晴 -->
-        <svg
-          v-if="themeMode === 'auto'"
-          viewBox="0 0 24 24"
-          class="w-5 h-5 fill-current"
-        >
-          <path
-            d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 1.8V20.2A8.2 8.2 0 0 1 12 3.8z"
-          />
+        <svg v-if="themeMode === 'auto'" viewBox="0 0 24 24" class="w-5 h-5 fill-current">
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 1.8V20.2A8.2 8.2 0 0 1 12 3.8z" />
         </svg>
         <!-- 浅色：太阳 -->
         <svg v-else-if="!resolvedDark" viewBox="0 0 24 24" class="w-5 h-5 fill-current">
@@ -45,17 +70,19 @@ onMounted(() => {
         </svg>
         <!-- 深色：月亮 -->
         <svg v-else viewBox="0 0 24 24" class="w-5 h-5 fill-current">
-          <path
-            d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"
-          />
+          <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />
         </svg>
       </button>
     </header>
 
     <main class="flex-1 min-h-0 overflow-y-auto pb-4">
-      <TrackList />
+      <PlaylistView v-if="activePlaylistId" :id="activePlaylistId" />
+      <Home v-else />
     </main>
+
     <PlayerBar />
+    <TrackMenu />
+
     <Transition name="now-playing">
       <NowPlaying v-if="player.showNowPlaying" />
     </Transition>
