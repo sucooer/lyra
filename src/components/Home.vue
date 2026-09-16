@@ -4,11 +4,16 @@ import { usePlayerStore } from '../stores/player'
 import { openPlaylist } from '../lib/nav'
 import PlaylistCard from './PlaylistCard.vue'
 import PlaylistCover from './PlaylistCover.vue'
-import TrackList from './TrackList.vue'
 
 const player = usePlayerStore()
 
 const radio = computed(() => player.radioCollection)
+
+/** 加载中 / 无内容时的兜底：首页只剩电台与歌单两节，都没有就会整页空白 */
+const loading = computed(() => !player.playlistLoaded)
+const nothing = computed(
+  () => player.playlistLoaded && !radio.value && player.playlistCards.length === 0,
+)
 
 function playRadio() {
   player.playRadio()
@@ -58,10 +63,14 @@ function playRadio() {
       </div>
     </section>
 
-    <!-- ===== 资料库歌曲 ===== -->
-    <section>
-      <h2 class="text-[22px] font-bold tracking-tight mb-3">歌曲</h2>
-      <TrackList />
-    </section>
+    <!-- 加载中 / 歌单为空：原来是底部歌曲小节承担的，去掉小节后在这里兜底 -->
+    <div v-if="loading" class="py-16 text-center text-fg-subtle text-sm space-y-3">
+      <div class="text-5xl animate-pulse">🎵</div>
+      <div>正在加载歌单…</div>
+    </div>
+    <div v-else-if="nothing" class="py-16 text-center text-fg-subtle text-sm space-y-2">
+      <div class="text-5xl">🎵</div>
+      <div>还没有可播放的内容，编辑 public/playlist.json 添加歌曲直链后刷新</div>
+    </div>
   </div>
 </template>
