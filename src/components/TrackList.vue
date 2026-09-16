@@ -30,8 +30,17 @@ function click(t: Track, i: number) {
 
 <template>
   <div class="px-6">
+    <!-- 歌单还在加载：显示加载态，避免刷新瞬间闪现「歌单是空的」 -->
     <div
-      v-if="player.tracks.length === 0"
+      v-if="!player.playlistLoaded"
+      class="mt-20 text-center text-white/30 text-sm space-y-3"
+    >
+      <div class="text-5xl animate-pulse">🎵</div>
+      <div>正在加载歌单…</div>
+    </div>
+
+    <div
+      v-else-if="player.tracks.length === 0"
       class="mt-20 text-center text-white/30 text-sm space-y-2"
     >
       <div class="text-5xl">🎵</div>

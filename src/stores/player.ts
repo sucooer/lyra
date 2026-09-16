@@ -45,6 +45,8 @@ function filenameOf(url: string): string {
 export const usePlayerStore = defineStore('player', {
   state: () => ({
     tracks: [] as Track[],
+    /** restore() 是否已完成：完成前列表显示加载态，而不是「歌单是空的」 */
+    playlistLoaded: false,
     currentIndex: -1,
     playing: false,
     currentTime: 0,
@@ -294,6 +296,9 @@ export const usePlayerStore = defineStore('player', {
         this.addUrls(data.filter((u: unknown) => typeof u === 'string'), cached)
       } catch {
         /* ignore */
+      } finally {
+        // 无论成败都要置位：失败时也该显示「空歌单」而不是永远转圈
+        this.playlistLoaded = true
       }
     },
   },
