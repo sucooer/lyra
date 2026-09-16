@@ -1,0 +1,69 @@
+import { computed, ref } from 'vue'
+
+export type ThemeMode = 'auto' | 'light' | 'dark'
+
+const KEY = 'lyra:theme'
+const META_COLOR = { light: '#ffffff', dark: '#000000' }
+
+function read(): ThemeMode {
+  try {
+    const v = localStorage.getItem(KEY)
+    return v === 'light' || v === 'dark' ? v : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+
+const mq =
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null
+
+/** 系统当前的深浅偏好（仅 auto 模式下决定结果） */
+export const systemDark = ref(mq ? mq.matches : true)
+export const themeMode = ref<ThemeMode>(read())
+
+/** 实际呈现：auto 时跟随系统 */
+export const resolvedDark = computed(() =>
+  themeMode.value === 'auto' ? systemDark.value : themeMode.value === 'dark',
+)
+
+export const themeLabel = computed(() =>
+  themeMode.value === 'auto'
+    ? `跟随系统（当前${resolvedDark.value ? '深色' : '浅色'}）`
+    : themeMode.value === 'dark'
+      ? '深色'
+      : '浅色',
+)
+
+function sync() {
+  const root = document.documentElement
+  if (themeMode.value === 'auto') root.removeAttribute('data-theme')
+  else root.setAttribute('data-theme', themeMode.value)
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', resolvedDark.value ? META_COLOR.dark : META_COLOR.light)
+}
+
+export function setTheme(m: ThemeMode) {
+  themeMode.value = m
+  try {
+    localStorage.setItem(KEY, m)
+  } catch {
+    /* 隐私模式下忽略 */
+  }
+  sync()
+}
+
+/** 点击循环：跟随系统 → 浅色 → 深色 */
+export function cycleTheme() {
+  setTheme(themeMode.value === 'auto' ? 'light' : themeMode.value === 'light' ? 'dark' : 'auto')
+}
+
+export function initTheme() {
+  mq?.addEventListener('change', (e) => {
+    systemDark.value = e.matches
+    sync()
+  })
+  sync()
+}

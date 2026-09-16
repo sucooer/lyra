@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import LyricsView from './LyricsView.vue'
+import { resolvedDark } from '../lib/theme'
 
 const player = usePlayerStore()
 const showLyrics = ref(false)
@@ -56,8 +57,8 @@ async function extractColor(src: string) {
       r += data[i]; g += data[i + 1]; b += data[i + 2]
     }
     r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n)
-    // 调暗并保证不太亮
-    const dim = 0.55
+    // 调暗并保证不太亮；浅色模式下只压一档，得到 Apple Music 那种淡色底
+    const dim = resolvedDark.value ? 0.55 : 0.9
     bgColor.value = `rgb(${Math.round(r * dim)},${Math.round(g * dim)},${Math.round(b * dim)})`
   } catch {
     bgColor.value = 'rgb(30,30,32)'
@@ -66,6 +67,8 @@ async function extractColor(src: string) {
 
 const cover = computed(() => player.currentTrack?.meta?.coverUrl)
 watch(cover, (c) => c && extractColor(c), { immediate: true })
+// 主题切换后重取主色调，浅色/深色的压暗档位不同
+watch(resolvedDark, () => cover.value && extractColor(cover.value))
 
 const progress = computed(() =>
   player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
@@ -93,23 +96,23 @@ function fmt(sec: number): string {
       :src="cover"
       class="absolute inset-0 w-full h-full object-cover blur-3xl opacity-40 scale-125 transition-opacity duration-700"
     />
-    <div class="absolute inset-0 bg-black/30"></div>
+    <div class="absolute inset-0 bg-np-scrim"></div>
 
     <!-- 顶栏：收起 / 标题 / 歌词开关 -->
     <div class="relative z-10 flex items-center justify-between px-5 md:px-8 pt-5">
       <button
-        class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
+        class="w-9 h-9 rounded-full bg-np-btn hover:bg-np-fill flex items-center justify-center transition"
         @click="player.showNowPlaying = false"
         title="收起"
       >
         <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
       </button>
-      <div class="text-xs uppercase tracking-widest text-white/60">
+      <div class="text-xs uppercase tracking-widest text-np-muted">
         {{ showLyrics ? '歌词' : '正在播放' }}
       </div>
       <button
         class="w-9 h-9 rounded-full flex items-center justify-center transition"
-        :class="showLyrics ? 'text-music' : 'text-white/70 hover:text-white'"
+        :class="showLyrics ? 'text-music' : 'text-np-muted hover:text-np-fg'"
         @click="showLyrics = !showLyrics"
         title="歌词"
       >
@@ -129,12 +132,12 @@ function fmt(sec: number): string {
           :class="player.playing ? 'scale-100' : 'scale-90'"
         >
           <img v-if="cover" :src="cover" class="w-full h-full object-cover" />
-          <div v-else class="w-full h-full bg-zinc-800 flex items-center justify-center text-7xl text-white/20">♪</div>
+          <div v-else class="w-full h-full bg-np-btn flex items-center justify-center text-7xl text-np-fill">♪</div>
         </div>
 
         <div class="mt-6 text-center">
           <div class="text-xl md:text-2xl font-bold truncate">{{ player.displayTitle }}</div>
-          <div class="text-base md:text-lg text-white/60 truncate mt-0.5">
+          <div class="text-base md:text-lg text-np-muted truncate mt-0.5">
             {{ player.displayArtist }}
             <template v-if="player.currentTrack?.meta?.album"> — {{ player.currentTrack.meta.album }}</template>
           </div>
@@ -142,10 +145,10 @@ function fmt(sec: number): string {
 
         <!-- 进度（支持点击与拖动，松手生效） -->
         <div class="mt-5 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
-          <div class="h-1.5 bg-white/20 rounded-full cursor-pointer group">
-            <div class="h-full bg-white rounded-full relative transition-colors group-hover:bg-music" :style="{ width: shownProgress + '%' }"></div>
+          <div class="h-1.5 bg-np-fill rounded-full cursor-pointer group">
+            <div class="h-full bg-np-fg rounded-full relative transition-colors group-hover:bg-music" :style="{ width: shownProgress + '%' }"></div>
           </div>
-          <div class="flex justify-between text-xs text-white/50 tabular-nums mt-1.5">
+          <div class="flex justify-between text-xs text-np-muted tabular-nums mt-1.5">
             <span>{{ fmt(shownCurrent) }}</span>
             <span>-{{ fmt(Math.max(0, player.duration - shownCurrent)) }}</span>
           </div>
@@ -155,25 +158,25 @@ function fmt(sec: number): string {
         <div class="mt-4 flex items-center justify-center gap-8">
           <button
             class="transition"
-            :class="player.shuffle ? 'text-music' : 'text-white/70 hover:text-white'"
+            :class="player.shuffle ? 'text-music' : 'text-np-muted hover:text-np-fg'"
             @click="player.shuffle = !player.shuffle"
             title="随机播放"
           >
             <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
           </button>
-          <button class="text-white transition hover:opacity-70" @click="player.prev">
+          <button class="text-np-fg transition hover:opacity-70" @click="player.prev">
             <svg viewBox="0 0 24 24" class="w-9 h-9 fill-current"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
           </button>
-          <button class="text-white transition hover:scale-105" @click="player.togglePlay">
+          <button class="text-np-fg transition hover:scale-105" @click="player.togglePlay">
             <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-16 h-16 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
             <svg v-else viewBox="0 0 24 24" class="w-16 h-16 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
           </button>
-          <button class="text-white transition hover:opacity-70" @click="player.next()">
+          <button class="text-np-fg transition hover:opacity-70" @click="player.next()">
             <svg viewBox="0 0 24 24" class="w-9 h-9 fill-current"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
           </button>
           <button
             class="transition"
-            :class="player.repeat !== 'off' ? 'text-music' : 'text-white/70 hover:text-white'"
+            :class="player.repeat !== 'off' ? 'text-music' : 'text-np-muted hover:text-np-fg'"
             @click="player.cycleRepeat"
             title="循环模式"
           >
@@ -184,13 +187,13 @@ function fmt(sec: number): string {
 
         <!-- 音量（窄屏隐藏，避免挤压纵向空间） -->
         <div class="hidden sm:flex mt-5 items-center gap-3 justify-center">
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-white/50"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
+          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-np-muted"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
           <input
             type="range" min="0" max="1" step="0.01" :value="player.volume"
-            class="w-48 accent-white"
+            class="w-48 accent-np-fg"
             @input="player.setVolume(parseFloat(($event.target as HTMLInputElement).value))"
           />
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-white/50"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-np-muted"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
         </div>
       </div>
     </div>
@@ -200,15 +203,15 @@ function fmt(sec: number): string {
       <LyricsView class="flex-1 min-h-0" />
       <div class="px-6 md:px-14 pt-3 shrink-0 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
         <div class="flex items-center gap-3">
-          <span class="text-xs text-white/50 tabular-nums w-10">{{ fmt(shownCurrent) }}</span>
-          <div class="flex-1 h-1 bg-white/20 rounded-full cursor-pointer">
-            <div class="h-full bg-white/80 rounded-full" :style="{ width: shownProgress + '%' }"></div>
+          <span class="text-xs text-np-muted tabular-nums w-10">{{ fmt(shownCurrent) }}</span>
+          <div class="flex-1 h-1 bg-np-fill rounded-full cursor-pointer">
+            <div class="h-full bg-np-fg rounded-full" :style="{ width: shownProgress + '%' }"></div>
           </div>
-          <button class="text-white/80 hover:text-white transition shrink-0" @click="player.togglePlay" title="播放/暂停">
+          <button class="text-np-muted hover:text-np-fg transition shrink-0" @click="player.togglePlay" title="播放/暂停">
             <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M8 5v14l11-7z"/></svg>
             <svg v-else viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
           </button>
-          <span class="text-xs text-white/50 tabular-nums w-10 text-right">{{ fmt(player.duration) }}</span>
+          <span class="text-xs text-np-muted tabular-nums w-10 text-right">{{ fmt(player.duration) }}</span>
         </div>
       </div>
     </div>

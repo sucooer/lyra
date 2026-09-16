@@ -81,17 +81,17 @@ onBeforeUnmount(() => cancelAnimationFrame(animId))
         class="lyric-line font-bold leading-snug cursor-pointer origin-left transition-all duration-500 ease-out will-change-transform"
         :class="
           i === activeIndex
-            ? 'text-white scale-110 md:scale-125'
+            ? 'text-np-fg scale-110 md:scale-125'
             : i < activeIndex
-              ? 'text-white/30 scale-100'
-              : 'text-white/35 scale-100 hover:text-white/60'
+              ? 'text-np-fg/30 scale-100'
+              : 'text-np-fg/35 scale-100 hover:text-np-fg/60'
         "
         @click="jump(line.time)"
       >
         {{ line.text || '♪' }}
       </div>
     </template>
-    <div v-else class="text-white/40 text-base pt-20 text-center select-none">
+    <div v-else class="text-np-muted text-base pt-20 text-center select-none">
       <template v-if="player.currentTrack?.meta?.plainLyrics">
         <pre class="whitespace-pre-wrap text-left text-sm leading-relaxed font-sans">{{ player.currentTrack.meta.plainLyrics }}</pre>
       </template>
@@ -101,7 +101,7 @@ onBeforeUnmount(() => cancelAnimationFrame(animId))
     <!-- 手动滚离当前行后出现，点击回到当前行 -->
     <button
       v-if="manualScrolling && lyrics.length"
-      class="fixed bottom-24 right-5 z-10 w-9 h-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center text-white/80 shadow-lg transition hover:bg-white/25"
+      class="fixed bottom-24 right-5 z-10 w-9 h-9 rounded-full bg-np-btn backdrop-blur flex items-center justify-center text-np-fg shadow-lg transition hover:bg-np-fill"
       title="回到当前行"
       @click="resumeFollow"
     >

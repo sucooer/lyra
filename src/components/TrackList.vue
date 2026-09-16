@@ -33,7 +33,7 @@ function click(t: Track, i: number) {
     <!-- 歌单还在加载：显示加载态，避免刷新瞬间闪现「歌单是空的」 -->
     <div
       v-if="!player.playlistLoaded"
-      class="mt-20 text-center text-white/30 text-sm space-y-3"
+      class="mt-20 text-center text-fg-subtle text-sm space-y-3"
     >
       <div class="text-5xl animate-pulse">🎵</div>
       <div>正在加载歌单…</div>
@@ -41,7 +41,7 @@ function click(t: Track, i: number) {
 
     <div
       v-else-if="player.tracks.length === 0"
-      class="mt-20 text-center text-white/30 text-sm space-y-2"
+      class="mt-20 text-center text-fg-subtle text-sm space-y-2"
     >
       <div class="text-5xl">🎵</div>
       <div>歌单是空的，编辑 public/playlist.json 添加歌曲直链后刷新</div>
@@ -51,24 +51,24 @@ function click(t: Track, i: number) {
       v-for="(t, i) in player.tracks"
       :key="t.id"
       class="group flex items-center gap-4 px-3 py-2 rounded-xl cursor-pointer transition"
-      :class="player.currentIndex === i ? 'bg-white/10' : 'hover:bg-white/5'"
+      :class="player.currentIndex === i ? 'bg-fill-strong' : 'hover:bg-fill'"
       @dblclick="player.play(i)"
       @click="click(t, i)"
     >
-      <div class="w-10 h-10 rounded-md overflow-hidden bg-zinc-800 shrink-0 relative">
+      <div class="w-10 h-10 rounded-md overflow-hidden bg-fill shrink-0 relative">
         <img
           v-if="t.meta?.coverUrl"
           :src="t.meta.coverUrl"
           class="w-full h-full object-cover"
           loading="lazy"
         />
-        <div v-else class="w-full h-full flex items-center justify-center text-white/30">
+        <div v-else class="w-full h-full flex items-center justify-center text-fg-subtle">
           <span v-if="t.loading" class="animate-pulse text-xs">…</span>
           <span v-else>♪</span>
         </div>
         <div
           v-if="player.currentIndex === i && player.playing"
-          class="absolute inset-0 bg-black/50 flex items-end justify-center gap-[2px] pb-1.5"
+          class="absolute inset-0 bg-scrim flex items-end justify-center gap-[2px] pb-1.5"
         >
           <span class="w-[3px] bg-music rounded animate-bounce h-3" style="animation-delay: 0s"></span>
           <span class="w-[3px] bg-music rounded animate-bounce h-4" style="animation-delay: .15s"></span>
@@ -83,20 +83,20 @@ function click(t: Track, i: number) {
         >
           {{ title(t) }}
         </div>
-        <div class="text-xs text-white/60 truncate">
+        <div class="text-xs text-fg-muted truncate">
           {{ t.meta?.artist || (t.loading ? '解析中…' : '未知艺术家') }}
           <template v-if="t.meta?.album"> — {{ t.meta.album }}</template>
         </div>
       </div>
 
-      <div class="text-xs text-white/40 tabular-nums hidden sm:block">
+      <div class="text-xs text-fg-subtle tabular-nums hidden sm:block">
         {{ t.meta?.codec ?? '' }}{{ t.meta?.bitrate ? ` · ${t.meta.bitrate}kbps` : '' }}
       </div>
-      <div class="text-xs text-white/40 tabular-nums w-12 text-right">
+      <div class="text-xs text-fg-muted tabular-nums w-12 text-right">
         {{ fmt(t.meta?.duration) }}
       </div>
       <button
-        class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-music transition px-1"
+        class="opacity-0 group-hover:opacity-100 text-fg-subtle hover:text-music transition px-1"
         title="移除"
         @click.stop="player.remove(t.id)"
       >

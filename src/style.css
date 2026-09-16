@@ -5,6 +5,99 @@
     "PingFang SC", "Microsoft YaHei", sans-serif;
   /* Apple Music 官方强调色（偏粉的 #FA233B，非 Tailwind red-500 的橙红） */
   --color-music: #fa233b;
+
+  /* 语义色：实际取值由下面 :root 里的变量按主题切换 */
+  --color-app: var(--app-bg);
+  --color-fg: var(--app-fg);
+  --color-fg-muted: var(--app-fg-muted);
+  --color-fg-subtle: var(--app-fg-subtle);
+  --color-fill: var(--app-fill);
+  --color-fill-strong: var(--app-fill-strong);
+  --color-line: var(--app-line);
+  --color-bar: var(--app-bar);
+  --color-track: var(--app-track);
+  --color-scrim: var(--app-scrim);
+  --color-solid: var(--app-solid);
+  --color-on-solid: var(--app-on-solid);
+
+  /* 正在播放页：始终覆盖在封面主色调上，两套配色独立 */
+  --color-np-fg: var(--np-fg);
+  --color-np-muted: var(--np-muted);
+  --color-np-btn: var(--np-btn);
+  --color-np-fill: var(--np-fill);
+  --color-np-scrim: var(--np-scrim);
+}
+
+/* ===== 浅色（默认） ===== */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app-bg: #ffffff;
+  --app-fg: #000000;
+  --app-fg-muted: rgba(0, 0, 0, 0.55);
+  --app-fg-subtle: rgba(0, 0, 0, 0.35);
+  --app-fill: rgba(0, 0, 0, 0.05);
+  --app-fill-strong: rgba(0, 0, 0, 0.09);
+  --app-line: rgba(0, 0, 0, 0.1);
+  --app-bar: rgba(255, 255, 255, 0.82);
+  --app-track: rgba(0, 0, 0, 0.12);
+  --app-scrim: rgba(255, 255, 255, 0.7);
+  --app-solid: #000000;
+  --app-on-solid: #ffffff;
+
+  --np-fg: #111111;
+  --np-muted: rgba(0, 0, 0, 0.55);
+  --np-btn: rgba(0, 0, 0, 0.1);
+  --np-fill: rgba(0, 0, 0, 0.15);
+  --np-scrim: rgba(255, 255, 255, 0.45);
+}
+
+/* ===== 深色：跟随系统（未手动指定时） ===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --app-bg: #000000;
+    --app-fg: #ffffff;
+    --app-fg-muted: rgba(255, 255, 255, 0.6);
+    --app-fg-subtle: rgba(255, 255, 255, 0.35);
+    --app-fill: rgba(255, 255, 255, 0.08);
+    --app-fill-strong: rgba(255, 255, 255, 0.14);
+    --app-line: rgba(255, 255, 255, 0.1);
+    --app-bar: rgba(9, 9, 11, 0.8);
+    --app-track: rgba(255, 255, 255, 0.18);
+    --app-scrim: rgba(0, 0, 0, 0.5);
+    --app-solid: #ffffff;
+    --app-on-solid: #000000;
+
+    --np-fg: #ffffff;
+    --np-muted: rgba(255, 255, 255, 0.6);
+    --np-btn: rgba(255, 255, 255, 0.14);
+    --np-fill: rgba(255, 255, 255, 0.25);
+    --np-scrim: rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ===== 深色：手动强制 ===== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #000000;
+  --app-fg: #ffffff;
+  --app-fg-muted: rgba(255, 255, 255, 0.6);
+  --app-fg-subtle: rgba(255, 255, 255, 0.35);
+  --app-fill: rgba(255, 255, 255, 0.08);
+  --app-fill-strong: rgba(255, 255, 255, 0.14);
+  --app-line: rgba(255, 255, 255, 0.1);
+  --app-bar: rgba(9, 9, 11, 0.8);
+  --app-track: rgba(255, 255, 255, 0.18);
+  --app-scrim: rgba(0, 0, 0, 0.5);
+  --app-solid: #ffffff;
+  --app-on-solid: #000000;
+
+  --np-fg: #ffffff;
+  --np-muted: rgba(255, 255, 255, 0.6);
+  --np-btn: rgba(255, 255, 255, 0.14);
+  --np-fill: rgba(255, 255, 255, 0.25);
+  --np-scrim: rgba(0, 0, 0, 0.3);
 }
 
 html,
@@ -15,8 +108,16 @@ body,
 }
 
 body {
-  @apply bg-black text-white antialiased select-none;
+  background-color: var(--app-bg);
+  color: var(--app-fg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
   font-family: var(--font-sans);
+}
+
+/* 主题切换时的柔和过渡 */
+#app {
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* 细滚动条 */
@@ -25,7 +126,8 @@ body {
   height: 6px;
 }
 *::-webkit-scrollbar-thumb {
-  @apply bg-white/20 rounded-full;
+  background-color: var(--app-fill-strong);
+  border-radius: 9999px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
