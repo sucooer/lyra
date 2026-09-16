@@ -31,6 +31,29 @@ function onDragUp(e: PointerEvent) {
 function onDragCancel() {
   dragRatio.value = null
 }
+
+/** 音量滑条：官方同样是一条粗圆角实心条，没有原生 range 的外观 */
+const volumeDrag = ref<number | null>(null)
+const shownVolume = computed(() => (volumeDrag.value !== null ? volumeDrag.value : player.volume))
+
+function volFrom(e: PointerEvent): number {
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+}
+function onVolDown(e: PointerEvent) {
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  volumeDrag.value = volFrom(e)
+  player.setVolume(volumeDrag.value)
+}
+function onVolMove(e: PointerEvent) {
+  if (volumeDrag.value === null) return
+  volumeDrag.value = volFrom(e)
+  player.setVolume(volumeDrag.value)
+}
+function onVolUp() {
+  volumeDrag.value = null
+}
+
 const shownProgress = computed(() =>
   dragRatio.value !== null ? dragRatio.value * 100 : progress.value,
 )
@@ -143,39 +166,70 @@ function fmt(sec: number): string {
           </div>
         </div>
 
-        <!-- 进度（支持点击与拖动，松手生效） -->
-        <div class="mt-5 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
-          <div class="h-1.5 bg-np-fill rounded-full cursor-pointer group">
-            <div class="h-full bg-np-fg rounded-full relative transition-colors group-hover:bg-music" :style="{ width: shownProgress + '%' }"></div>
+        <!-- 进度（官方：粗圆角实心条，无圆点；支持点击与拖动，松手生效） -->
+        <div class="mt-6 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
+          <div class="relative h-4 flex items-center cursor-pointer">
+            <div class="absolute inset-x-0 h-2 rounded-full bg-np-fill">
+              <div class="h-full rounded-full bg-np-fg" :style="{ width: shownProgress + '%' }"></div>
+            </div>
           </div>
-          <div class="flex justify-between text-xs text-np-muted tabular-nums mt-1.5">
+          <div class="flex justify-between mt-1.5 text-[17px] font-medium text-np-fg/70 tabular-nums">
             <span>{{ fmt(shownCurrent) }}</span>
             <span>-{{ fmt(Math.max(0, player.duration - shownCurrent)) }}</span>
           </div>
         </div>
 
-        <!-- 控制 -->
-        <div class="mt-4 flex items-center justify-center gap-8">
+        <!-- 控制：官方为 ◀◀ / ▶(⏸) / ▶▶ 三个纯色大按钮，无圆底、无竖条 -->
+        <div class="mt-5 flex items-center justify-center gap-5 sm:gap-9">
           <button
-            class="transition"
+            class="transition shrink-0"
             :class="player.shuffle ? 'text-music' : 'text-np-muted hover:text-np-fg'"
             @click="player.shuffle = !player.shuffle"
             title="随机播放"
           >
             <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
           </button>
-          <button class="text-np-fg transition hover:opacity-70" @click="player.prev">
-            <svg viewBox="0 0 24 24" class="w-9 h-9 fill-current"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+
+          <!-- ◀◀ 上一首：双三角 -->
+          <button class="text-np-fg transition hover:opacity-70 active:opacity-50" @click="player.prev" title="上一首">
+            <svg viewBox="0 0 24 24" class="w-10 h-10 fill-current" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+              <path d="M21.5 5v14L12 12zM13 5v14l-9.5-7z" />
+            </svg>
           </button>
-          <button class="text-np-fg transition hover:scale-105" @click="player.togglePlay">
-            <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-16 h-16 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
-            <svg v-else viewBox="0 0 24 24" class="w-16 h-16 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-          </button>
-          <button class="text-np-fg transition hover:opacity-70" @click="player.next()">
-            <svg viewBox="0 0 24 24" class="w-9 h-9 fill-current"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
-          </button>
+
+          <!-- ▶ / ⏸ 播放暂停：单个大三角，无圆形底 -->
           <button
-            class="transition"
+            class="text-np-fg transition hover:opacity-80 active:scale-95 shrink-0"
+            @click="player.togglePlay"
+            :title="player.playing ? '暂停' : '播放'"
+          >
+            <svg
+              v-if="!player.playing"
+              viewBox="0 0 24 24"
+              class="w-16 h-16 fill-current"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+            >
+              <path d="M6 4.5v15L19 12z" />
+            </svg>
+            <svg
+              v-else
+              viewBox="0 0 24 24"
+              class="w-16 h-16 fill-current"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+            >
+              <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" />
+            </svg>
+          </button>
+
+          <!-- ▶▶ 下一首：双三角 -->
+          <button class="text-np-fg transition hover:opacity-70 active:opacity-50" @click="player.next()" title="下一首">
+            <svg viewBox="0 0 24 24" class="w-10 h-10 fill-current" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+              <path d="M2.5 5v14L12 12zM11 5v14l9.5-7z" />
+            </svg>
+          </button>
+
+          <button
+            class="transition shrink-0"
             :class="player.repeat !== 'off' ? 'text-music' : 'text-np-muted hover:text-np-fg'"
             @click="player.cycleRepeat"
             title="循环模式"
@@ -185,15 +239,21 @@ function fmt(sec: number): string {
           </button>
         </div>
 
-        <!-- 音量（窄屏隐藏，避免挤压纵向空间） -->
-        <div class="hidden sm:flex mt-5 items-center gap-3 justify-center">
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-np-muted"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
-          <input
-            type="range" min="0" max="1" step="0.01" :value="player.volume"
-            class="w-48 accent-np-fg"
-            @input="player.setVolume(parseFloat(($event.target as HTMLInputElement).value))"
-          />
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-np-muted"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <!-- 音量（窄屏隐藏，避免挤压纵向空间）：左右喇叭图标 + 同款粗圆角条 -->
+        <div class="hidden sm:flex mt-6 items-center gap-3">
+          <svg viewBox="0 0 24 24" class="w-5 h-5 fill-np-fg shrink-0"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>
+          <div
+            class="flex-1 h-4 flex items-center touch-none select-none cursor-pointer"
+            @pointerdown="onVolDown"
+            @pointermove="onVolMove"
+            @pointerup="onVolUp"
+            @pointercancel="onVolUp"
+          >
+            <div class="relative w-full h-2 rounded-full bg-np-fill">
+              <div class="h-full rounded-full bg-np-fg" :style="{ width: shownVolume * 100 + '%' }"></div>
+            </div>
+          </div>
+          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-np-fg shrink-0"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
         </div>
       </div>
     </div>
@@ -207,9 +267,9 @@ function fmt(sec: number): string {
           <div class="flex-1 h-1 bg-np-fill rounded-full cursor-pointer">
             <div class="h-full bg-np-fg rounded-full" :style="{ width: shownProgress + '%' }"></div>
           </div>
-          <button class="text-np-muted hover:text-np-fg transition shrink-0" @click="player.togglePlay" title="播放/暂停">
-            <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M8 5v14l11-7z"/></svg>
-            <svg v-else viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+          <button class="text-np-fg hover:opacity-70 transition shrink-0" @click="player.togglePlay" title="播放/暂停">
+            <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-6 h-6 fill-current" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M6 4.5v15L19 12z"/></svg>
+            <svg v-else viewBox="0 0 24 24" class="w-6 h-6 fill-current" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z"/></svg>
           </button>
           <span class="text-xs text-np-muted tabular-nums w-10 text-right">{{ fmt(player.duration) }}</span>
         </div>

@@ -58,7 +58,7 @@ function fmt(sec: number): string {
   <!-- 浮起的圆角卡片（对齐 Apple Music 迷你播放条），无歌曲时也保留位置 -->
   <div class="relative z-30 px-2 pt-1 pb-2 sm:px-3 sm:pb-3">
     <div
-      class="relative rounded-[26px] bg-bar backdrop-blur-xl overflow-hidden shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
+      class="relative rounded-[32px] bg-bar backdrop-blur-xl overflow-hidden shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
     >
       <!-- ===================== 有歌曲 ===================== -->
       <template v-if="player.currentTrack">
@@ -69,7 +69,7 @@ function fmt(sec: number): string {
             @click="player.showNowPlaying = true"
           >
             <div
-              class="w-13 h-13 sm:w-14 sm:h-14 rounded-[14px] overflow-hidden bg-fill shrink-0"
+              class="w-13 h-13 sm:w-14 sm:h-14 rounded-[16px] overflow-hidden bg-fill shrink-0"
             >
               <img
                 v-if="player.currentTrack.meta?.coverUrl"
@@ -106,10 +106,10 @@ function fmt(sec: number): string {
               @click="player.togglePlay"
               :title="player.playing ? '暂停' : '播放'"
             >
-              <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current">
+              <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
                 <path d="M6 4.5v15L19 12z" />
               </svg>
-              <svg v-else viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current">
+              <svg v-else viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
                 <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" />
               </svg>
             </button>
@@ -120,7 +120,7 @@ function fmt(sec: number): string {
               @click="player.next()"
               title="下一首"
             >
-              <svg viewBox="0 0 24 24" class="w-8 h-8 sm:w-9 sm:h-9 fill-current">
+              <svg viewBox="0 0 24 24" class="w-8 h-8 sm:w-9 sm:h-9 fill-current" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
                 <path d="M2.5 5v14L12 12zM11 5v14l9.5-7z" />
               </svg>
             </button>
@@ -173,7 +173,7 @@ function fmt(sec: number): string {
       <!-- ===================== 无歌曲：官方空播放条 ===================== -->
       <div v-else class="flex items-center gap-3 pl-3 pr-4 sm:pl-4 sm:pr-6 py-3 sm:py-3.5">
         <div
-          class="w-13 h-13 sm:w-14 sm:h-14 rounded-[14px] bg-fill flex items-center justify-center text-fg-subtle shrink-0"
+          class="w-13 h-13 sm:w-14 sm:h-14 rounded-[16px] bg-fill flex items-center justify-center text-fg-subtle shrink-0"
         >
           <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current">
             <path d="M12 3v11.3A3.7 3.7 0 1 0 14 17.7V7h5V3h-7z" />
@@ -181,10 +181,10 @@ function fmt(sec: number): string {
         </div>
         <!-- 官方空态同为 ▶ 与 ▶▶ 两个纯色双键 -->
         <div class="flex items-center gap-7 sm:gap-8 text-fg ml-auto" aria-hidden="true">
-          <svg viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current">
+          <svg viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
             <path d="M6 4.5v15L19 12z" />
           </svg>
-          <svg viewBox="0 0 24 24" class="w-8 h-8 sm:w-9 sm:h-9 fill-current">
+          <svg viewBox="0 0 24 24" class="w-8 h-8 sm:w-9 sm:h-9 fill-current" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
             <path d="M2.5 5v14L12 12zM11 5v14l9.5-7z" />
           </svg>
         </div>
