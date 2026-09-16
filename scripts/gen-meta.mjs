@@ -8,6 +8,10 @@
  * 歌词体积占了元数据的绝大部分，而列表页并不需要它，拆开后首屏只为列表字段买单，
  * 歌词在播放到该曲目时才按需拉取。
  *
+ * 封面按图片内容哈希命名（public/covers/<内容sha1>.jpg），不按曲目直链：
+ * 同专辑多首曲子内嵌同一张封面时只落一个文件，且换歌单/换直链不会重存。
+ * 每次运行结束会清掉 covers/ 与 lyrics/ 里不再被 meta.json 引用的文件。
+ *
  * 用法：
  *   node scripts/gen-meta.mjs            # 只解析 meta.json 里缺失的条目
  *   node scripts/gen-meta.mjs --force    # 全部重新解析
@@ -17,7 +21,7 @@
  * 升级自旧版本（歌词内嵌）时，首次运行会自动把已有歌词迁出，无需重新下载音频。
  */
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { parseBlob } from 'music-metadata'
@@ -54,12 +58,17 @@ function coverExt(format) {
   return (format || 'image/jpeg').split('/')[1]?.replace('jpeg', 'jpg') || 'jpg'
 }
 
-function shortHash(url) {
-  return createHash('sha1').update(url).digest('hex').slice(0, 12)
+function shortHash(input) {
+  return createHash('sha1').update(input).digest('hex').slice(0, 12)
 }
 
-function coverName(url, format) {
-  return `${shortHash(url)}.${coverExt(format)}`
+/**
+ * 封面按「图片内容」命名，不按曲目直链。
+ * 同一张专辑的每首曲子都内嵌同一张封面，按直链命名会各存一份完全相同的文件
+ * （实测 9 首里就有 3 对重复）；按内容命名后相同的图天然合并成一个文件。
+ */
+function coverName(data, format) {
+  return `${shortHash(data)}.${coverExt(format)}`
 }
 
 /** 递增分块下载，边下边试解析，拿到所需内容即停 */
@@ -162,6 +171,58 @@ async function migrateLegacyLyrics(cache) {
   return moved
 }
 
+/**
+ * 旧版封面文件名是 sha1(曲目直链)，迁到「内容哈希」命名。
+ * 直接读本地已落盘的图片重新命名，不需要重新下载音频；内容相同的会指向同一个文件。
+ */
+async function migrateCoverNames(cache) {
+  let migrated = 0
+  for (const entry of Object.values(cache.tracks)) {
+    if (!entry.cover) continue
+    const oldName = path.basename(entry.cover)
+    const oldPath = path.join(COVER_DIR, oldName)
+    if (!existsSync(oldPath)) continue
+    const data = await readFile(oldPath)
+    const newName = `${shortHash(data)}.${oldName.split('.').pop()}`
+    if (newName === oldName) continue
+    await writeIfChanged(path.join(COVER_DIR, newName), data)
+    entry.cover = `/covers/${newName}`
+    migrated++
+  }
+  return migrated
+}
+
+/** 只在内容不同时才写盘，避免同一张封面被重复覆盖 */
+async function writeIfChanged(file, data) {
+  if (existsSync(file)) {
+    const old = await readFile(file)
+    if (old.length === data.length && old.equals(data)) return
+  }
+  await writeFile(file, data)
+}
+
+/**
+ * 清理 covers/ 与 lyrics/ 里不再被 meta.json 引用的文件
+ * （改名后的旧文件、换封面/换歌词后的残留）。
+ * 判断依据是当前 meta.json，所以处理到一半中断也不会误删还在用的资源。
+ */
+async function sweepOrphans(cache) {
+  const entries = Object.values(cache.tracks)
+  const targets = [
+    [COVER_DIR, new Set(entries.map((e) => e.cover && path.basename(e.cover)).filter(Boolean))],
+    [LYRICS_DIR, new Set(entries.map((e) => e.lyricsUrl && path.basename(e.lyricsUrl)).filter(Boolean))],
+  ]
+  let removed = 0
+  for (const [dir, keep] of targets) {
+    for (const name of await readdir(dir)) {
+      if (keep.has(name)) continue
+      await unlink(path.join(dir, name))
+      removed++
+    }
+  }
+  return removed
+}
+
 function toCached(meta, coverRelPath, lyricsUrl) {
   const c = meta.common
 
@@ -230,9 +291,14 @@ async function main() {
   await mkdir(LYRICS_DIR, { recursive: true })
 
   // 旧版 meta.json 把歌词内嵌在条目里，先搬到独立文件（不需要重新下载音频）
-  const moved = await migrateLegacyLyrics(cache)
-  if (moved > 0) {
-    console.log(`已把 ${moved} 条歌词迁出 meta.json → public/lyrics/`)
+  const movedLyrics = await migrateLegacyLyrics(cache)
+  if (movedLyrics > 0) console.log(`已把 ${movedLyrics} 条歌词迁出 meta.json → public/lyrics/`)
+
+  // 封面从「按直链命名」迁到「按内容命名」，顺便合并重复的那些
+  const movedCovers = await migrateCoverNames(cache)
+  if (movedCovers > 0) console.log(`已把 ${movedCovers} 张封面转为按内容命名 → public/covers/`)
+
+  if (movedLyrics > 0 || movedCovers > 0) {
     cache.generatedAt = new Date().toISOString()
     await writeFile(META_OUT, JSON.stringify(cache, null, 2))
   }
@@ -274,6 +340,15 @@ async function main() {
 
   cache.generatedAt = new Date().toISOString()
   await writeFile(META_OUT, JSON.stringify(cache, null, 2))
+
+  // 缓存非空才清理，避免 meta.json 损坏/被清空时把整个 covers 目录误删
+  if (Object.keys(cache.tracks).length > 0) {
+    const orphans = await sweepOrphans(cache)
+    if (orphans > 0) console.log(`已清理 ${orphans} 个不再被引用的封面/歌词文件`)
+    const covers = (await readdir(COVER_DIR)).length
+    console.log(`封面：${covers} 个文件（按内容去重后）`)
+  }
+
   const sizeKB = (await readFile(META_OUT)).length / 1024
   console.log(
     `\n完成：新增/更新 ${done} 条，meta.json 共 ${Object.keys(cache.tracks).length} 条（${sizeKB.toFixed(1)}KB，歌词另存 public/lyrics/）`,
