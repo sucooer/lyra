@@ -3,6 +3,8 @@
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
     "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* Apple Music 官方强调色（偏粉的 #FA233B，非 Tailwind red-500 的橙红） */
+  --color-music: #fa233b;
 }
 
 html,

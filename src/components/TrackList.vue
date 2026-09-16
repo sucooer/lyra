@@ -70,33 +70,33 @@ function click(t: Track, i: number) {
           v-if="player.currentIndex === i && player.playing"
           class="absolute inset-0 bg-black/50 flex items-end justify-center gap-[2px] pb-1.5"
         >
-          <span class="w-[3px] bg-red-500 rounded animate-bounce h-3" style="animation-delay: 0s"></span>
-          <span class="w-[3px] bg-red-500 rounded animate-bounce h-4" style="animation-delay: .15s"></span>
-          <span class="w-[3px] bg-red-500 rounded animate-bounce h-2" style="animation-delay: .3s"></span>
+          <span class="w-[3px] bg-music rounded animate-bounce h-3" style="animation-delay: 0s"></span>
+          <span class="w-[3px] bg-music rounded animate-bounce h-4" style="animation-delay: .15s"></span>
+          <span class="w-[3px] bg-music rounded animate-bounce h-2" style="animation-delay: .3s"></span>
         </div>
       </div>
 
       <div class="flex-1 min-w-0">
         <div
           class="text-sm font-medium truncate"
-          :class="player.currentIndex === i ? 'text-red-400' : ''"
+          :class="player.currentIndex === i ? 'text-music' : ''"
         >
           {{ title(t) }}
         </div>
-        <div class="text-xs text-white/40 truncate">
+        <div class="text-xs text-white/60 truncate">
           {{ t.meta?.artist || (t.loading ? '解析中…' : '未知艺术家') }}
           <template v-if="t.meta?.album"> — {{ t.meta.album }}</template>
         </div>
       </div>
 
-      <div class="text-xs text-white/30 tabular-nums hidden sm:block">
+      <div class="text-xs text-white/40 tabular-nums hidden sm:block">
         {{ t.meta?.codec ?? '' }}{{ t.meta?.bitrate ? ` · ${t.meta.bitrate}kbps` : '' }}
       </div>
       <div class="text-xs text-white/40 tabular-nums w-12 text-right">
         {{ fmt(t.meta?.duration) }}
       </div>
       <button
-        class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 transition px-1"
+        class="opacity-0 group-hover:opacity-100 text-white/40 hover:text-music transition px-1"
         title="移除"
         @click.stop="player.remove(t.id)"
       >

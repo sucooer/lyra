@@ -109,7 +109,7 @@ function fmt(sec: number): string {
       </div>
       <button
         class="w-9 h-9 rounded-full flex items-center justify-center transition"
-        :class="showLyrics ? 'text-red-500' : 'text-white/70 hover:text-white'"
+        :class="showLyrics ? 'text-music' : 'text-white/70 hover:text-white'"
         @click="showLyrics = !showLyrics"
         title="歌词"
       >
@@ -143,7 +143,7 @@ function fmt(sec: number): string {
         <!-- 进度（支持点击与拖动，松手生效） -->
         <div class="mt-5 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
           <div class="h-1.5 bg-white/20 rounded-full cursor-pointer group">
-            <div class="h-full bg-white rounded-full relative transition-colors group-hover:bg-red-500" :style="{ width: shownProgress + '%' }"></div>
+            <div class="h-full bg-white rounded-full relative transition-colors group-hover:bg-music" :style="{ width: shownProgress + '%' }"></div>
           </div>
           <div class="flex justify-between text-xs text-white/50 tabular-nums mt-1.5">
             <span>{{ fmt(shownCurrent) }}</span>
@@ -155,7 +155,7 @@ function fmt(sec: number): string {
         <div class="mt-4 flex items-center justify-center gap-8">
           <button
             class="transition"
-            :class="player.shuffle ? 'text-red-500' : 'text-white/70 hover:text-white'"
+            :class="player.shuffle ? 'text-music' : 'text-white/70 hover:text-white'"
             @click="player.shuffle = !player.shuffle"
             title="随机播放"
           >
@@ -173,7 +173,7 @@ function fmt(sec: number): string {
           </button>
           <button
             class="transition"
-            :class="player.repeat !== 'off' ? 'text-red-500' : 'text-white/70 hover:text-white'"
+            :class="player.repeat !== 'off' ? 'text-music' : 'text-white/70 hover:text-white'"
             @click="player.cycleRepeat"
             title="循环模式"
           >

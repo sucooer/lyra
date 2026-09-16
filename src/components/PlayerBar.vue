@@ -65,7 +65,7 @@ function onSeek(e: MouseEvent) {
       @click="onSeek"
     >
       <div class="h-[3px] mt-[3px] bg-white/15 group-hover:h-[5px] group-hover:mt-[1px] transition-all">
-        <div class="h-full bg-white/60 group-hover:bg-red-500 transition-colors" :style="{ width: progress + '%' }"></div>
+        <div class="h-full bg-white/60 group-hover:bg-music transition-colors" :style="{ width: progress + '%' }"></div>
       </div>
     </div>
 
@@ -93,7 +93,7 @@ function onSeek(e: MouseEvent) {
       <div class="flex items-center justify-end sm:justify-center gap-3 sm:gap-6 shrink-0">
         <button
           class="hidden sm:flex transition shrink-0"
-          :class="player.shuffle ? 'text-red-500' : 'text-white/60 hover:text-white'"
+          :class="player.shuffle ? 'text-music' : 'text-white/60 hover:text-white'"
           @click="player.shuffle = !player.shuffle"
           title="随机播放"
         >
@@ -114,7 +114,7 @@ function onSeek(e: MouseEvent) {
         </button>
         <button
           class="hidden sm:flex transition shrink-0"
-          :class="player.repeat !== 'off' ? 'text-red-500' : 'text-white/60 hover:text-white'"
+          :class="player.repeat !== 'off' ? 'text-music' : 'text-white/60 hover:text-white'"
           @click="player.cycleRepeat"
           title="循环"
         >
@@ -134,7 +134,7 @@ function onSeek(e: MouseEvent) {
           max="1"
           step="0.01"
           :value="player.volume"
-          class="hidden lg:block w-20 accent-red-500"
+          class="hidden lg:block w-20 accent-music"
           @input="player.setVolume(parseFloat(($event.target as HTMLInputElement).value))"
         />
       </div>
