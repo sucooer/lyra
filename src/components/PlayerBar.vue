@@ -1,63 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { openNowPlaying } from '../lib/nav'
+import { fmtClock, useScrubber } from '../lib/scrubber'
 
 const player = usePlayerStore()
 
-const progress = computed(() =>
-  player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
-)
-
-/** 拖动中的预览比例（null = 未在拖动）；松手才真正 seek，避免流式音频频繁 range 请求 */
-const dragRatio = ref<number | null>(null)
-
-function ratioFrom(e: PointerEvent): number {
-  const el = e.currentTarget as HTMLElement
-  const r = el.getBoundingClientRect()
-  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-}
-
-function onDragDown(e: PointerEvent) {
-  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  dragRatio.value = ratioFrom(e)
-}
-function onDragMove(e: PointerEvent) {
-  if (dragRatio.value === null) return
-  dragRatio.value = ratioFrom(e)
-}
-function onDragUp(e: PointerEvent) {
-  if (dragRatio.value === null) return
-  const r = ratioFrom(e)
-  dragRatio.value = null // 先清拖动态，再 seek，避免进度条闪回
-  player.seek(r * player.duration)
-}
-function onDragCancel() {
-  dragRatio.value = null
-}
-
-/** 滑轨显示比例（0-100）：拖动时跟手，否则跟播放进度 */
-const shownPercent = computed(() =>
-  dragRatio.value !== null ? dragRatio.value * 100 : progress.value,
-)
-
-/** 拖动/点击时用于显示的时间 */
-const shownCurrent = computed(() =>
-  dragRatio.value !== null ? dragRatio.value * player.duration : player.currentTime,
-)
-const shownRemain = computed(() => Math.max(0, player.duration - shownCurrent.value))
-
-function fmt(sec: number): string {
-  if (!sec || !isFinite(sec)) return '0:00'
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
-}
+// 拖拽逻辑与宽屏胶囊条共用（见 lib/scrubber.ts）
+const { dragging, onDragDown, onDragMove, onDragUp, onDragCancel, shownPercent, shownCurrent, shownRemain } =
+  useScrubber(player)
 </script>
 
 <template>
-  <!-- 浮起的圆角玻璃条（对齐 Apple Music 迷你播放条），无歌曲时也保留位置 -->
-  <div class="absolute inset-x-0 bottom-0 z-30 px-2 pb-2 sm:px-3 sm:pb-3">
+  <!-- 浮起的圆角玻璃条（对齐 Apple Music 迷你播放条），无歌曲时也保留位置。
+       宽屏另有单行胶囊版本（PlayerBarWide），这里从 lg 起让位 -->
+  <div class="absolute inset-x-0 bottom-0 z-30 lg:hidden px-2 pb-2 sm:px-3 sm:pb-3">
     <div class="relative rounded-[32px] bar-glass overflow-hidden">
       <!-- ===================== 有歌曲 ===================== -->
       <template v-if="player.currentTrack">
@@ -155,7 +111,7 @@ function fmt(sec: number): string {
                 <!-- 大号圆形滑块：中心落在播放进度上，可拖拽 -->
                 <span
                   class="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-4 rounded-full bg-fg shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-transform"
-                  :class="dragRatio !== null ? 'scale-125' : ''"
+                  :class="dragging ? 'scale-125' : ''"
                 ></span>
               </div>
             </div>
@@ -163,8 +119,8 @@ function fmt(sec: number): string {
 
           <!-- 第三行：已播放时间 / 剩余时间 -->
           <div class="flex justify-between mt-1.5 text-[11px] text-fg-subtle tabular-nums">
-            <span>{{ fmt(shownCurrent) }}</span>
-            <span>-{{ fmt(shownRemain) }}</span>
+            <span>{{ fmtClock(shownCurrent) }}</span>
+            <span>-{{ fmtClock(shownRemain) }}</span>
           </div>
         </div>
       </template>

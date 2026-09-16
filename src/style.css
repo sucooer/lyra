@@ -44,6 +44,13 @@
   /* 上沿内高光 / 外描边：让玻璃有厚度，不是一块平色矩形 */
   --app-bar-rim: rgba(255, 255, 255, 0.9);
   --app-bar-line: rgba(0, 0, 0, 0.06);
+  /* 宽屏胶囊播放条：比迷你条更实，小字压在底色上才看得清 */
+  --app-capsule: rgba(252, 252, 253, 0.72);
+  --app-capsule-rim: rgba(255, 255, 255, 0.9);
+  --app-capsule-line: rgba(0, 0, 0, 0.06);
+  /* 顶部工具栏：内容从它底下滚过 */
+  --app-topbar: rgba(255, 255, 255, 0.72);
+  --app-topbar-line: rgba(0, 0, 0, 0.08);
   --app-track: rgba(0, 0, 0, 0.12);
   --app-scrim: rgba(255, 255, 255, 0.7);
   --app-solid: #000000;
@@ -70,6 +77,12 @@
     --app-bar: rgba(28, 28, 30, 0.5);
     --app-bar-rim: rgba(255, 255, 255, 0.12);
     --app-bar-line: rgba(255, 255, 255, 0.08);
+    /* 深色下官方那条胶囊是「比底色更亮的磨砂」，靠白色薄雾叠出来 */
+    --app-capsule: rgba(255, 255, 255, 0.16);
+    --app-capsule-rim: rgba(255, 255, 255, 0.16);
+    --app-capsule-line: rgba(255, 255, 255, 0.1);
+    --app-topbar: rgba(28, 28, 30, 0.72);
+    --app-topbar-line: rgba(255, 255, 255, 0.08);
     --app-track: rgba(255, 255, 255, 0.18);
     --app-scrim: rgba(0, 0, 0, 0.5);
     --app-solid: #ffffff;
@@ -141,6 +154,43 @@ body {
   box-shadow:
     inset 0 1px 0 0 var(--app-bar-rim),
     0 10px 30px rgba(0, 0, 0, 0.14);
+}
+
+/*
+ * 宽屏胶囊播放条（对齐官方桌面端那条磨砂胶囊）。
+ * 与迷你条的差别在模糊强度：胶囊面积大、文字小，模糊弱了压不住底下的封面。
+ */
+.capsule-glass {
+  background-color: var(--app-capsule);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--app-capsule-line);
+  box-shadow:
+    inset 0 1px 0 0 var(--app-capsule-rim),
+    0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+/* 队列面板：同材质但不做成胶囊，圆角方盒 */
+.capsule-panel {
+  background-color: var(--app-capsule);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--app-capsule-line);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3);
+}
+
+/*
+ * 宽屏顶部工具栏：滚动内容从它底下穿过。
+ * 只在 lg 起生效（媒体查询写在这里，标记里就能是一个不带断点前缀的类名），
+ * 手机上顶栏保持原来的透明样式。
+ */
+@media (min-width: 1024px) {
+  .topbar-glass {
+    background-color: var(--app-topbar);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--app-topbar-line);
+  }
 }
 
 /* 细滚动条 */

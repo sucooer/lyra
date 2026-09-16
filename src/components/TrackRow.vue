@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { usePlayerStore, type Track } from '../stores/player'
 import { useTrackMenu } from '../lib/trackMenu'
-import { trackTitle } from '../lib/track'
+import { trackTitle, fmtTime } from '../lib/track'
 
 const props = defineProps<{
   track: Track
@@ -73,8 +73,13 @@ function onRow() {
       </div>
     </div>
 
+    <!-- 宽屏补上官方列表里的时长列 -->
+    <span class="hidden lg:block shrink-0 w-12 text-right text-[13px] text-fg-muted tabular-nums">
+      {{ track.meta?.duration ? fmtTime(track.meta.duration) : '' }}
+    </span>
+
     <button
-      class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
+      class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100"
       title="更多"
       @click.stop="menu.open($event, track)"
     >

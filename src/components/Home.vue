@@ -21,12 +21,12 @@ function playRadio() {
 </script>
 
 <template>
-  <div class="px-4 sm:px-6 pb-6 space-y-8">
+  <div class="px-4 sm:px-6 lg:px-10 pt-0 lg:pt-5 pb-6 space-y-8 lg:space-y-12">
     <!-- ===== 电台：整块可点，一键随机无限播放全部歌曲 ===== -->
     <section v-if="radio">
       <h2 class="text-[22px] font-bold tracking-tight mb-3">电台</h2>
       <button
-        class="group w-full flex items-center gap-4 p-3 rounded-2xl bg-fill hover:bg-fill-strong active:scale-[0.99] transition text-left"
+        class="group w-full lg:max-w-[420px] flex items-center gap-4 p-3 rounded-2xl bg-fill hover:bg-fill-strong active:scale-[0.99] transition text-left"
         @click="playRadio"
       >
         <div class="w-20 h-20 sm:w-[92px] sm:h-[92px] shrink-0">
@@ -51,7 +51,9 @@ function playRadio() {
     <!-- ===== 歌单：卡片网格（对齐 Apple Music 推荐区） ===== -->
     <section v-if="player.playlistCards.length">
       <h2 class="text-[22px] font-bold tracking-tight mb-3">为你推荐</h2>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-6">
+      <div
+        class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(196px,1fr))] gap-x-4 gap-y-6 lg:gap-x-5 lg:gap-y-9"
+      >
         <button
           v-for="c in player.playlistCards"
           :key="c.def.id"

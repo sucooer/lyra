@@ -54,40 +54,45 @@ function openInPlayer() {
 </script>
 
 <template>
-  <div v-if="collection" class="px-4 sm:px-6 pb-6">
-    <!-- 头部：大封面 + 标题 -->
-    <div class="flex flex-col items-center text-center pt-1">
-      <div class="w-40 h-40 sm:w-52 sm:h-52 rounded-2xl overflow-hidden shadow-xl">
+  <div v-if="collection" class="px-4 sm:px-6 lg:px-10 pb-6">
+    <!-- 头部：手机上竖排居中，宽屏改成官方的「左封面 + 右信息」 -->
+    <div
+      class="flex flex-col items-center text-center pt-1 lg:flex-row lg:items-end lg:text-left lg:gap-7 lg:pt-4"
+    >
+      <div class="w-40 h-40 sm:w-52 sm:h-52 shrink-0 rounded-2xl overflow-hidden shadow-xl">
         <PlaylistCover :collection="collection" />
       </div>
-      <h2 class="mt-4 text-2xl sm:text-3xl font-bold tracking-tight">
-        {{ collection.def.title }}
-      </h2>
-      <div v-if="collection.def.subtitle" class="text-[15px] text-fg-muted mt-1">
-        {{ collection.def.subtitle }}
-      </div>
-      <div class="text-[13px] text-fg-subtle mt-0.5">
-        {{ collection.tracks.length }} 首
-        <template v-if="totalTime"> · {{ fmtTotal(totalTime) }}</template>
-      </div>
 
-      <div class="mt-5 flex items-center gap-3">
-        <button
-          class="flex items-center gap-2 px-5 h-10 rounded-full bg-solid text-on-solid text-[15px] font-medium hover:opacity-85 transition"
-          @click="playAll"
-        >
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M8 5v14l11-7z" /></svg>
-          播放
-        </button>
-        <button
-          class="flex items-center gap-2 px-5 h-10 rounded-full bg-fill text-fg text-[15px] font-medium hover:bg-fill-strong transition"
-          @click="shuffleAll"
-        >
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current">
-            <path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
-          </svg>
-          随机播放
-        </button>
+      <div class="min-w-0">
+        <h2 class="mt-4 lg:mt-0 text-2xl sm:text-3xl lg:text-[40px] font-bold tracking-tight truncate">
+          {{ collection.def.title }}
+        </h2>
+        <div v-if="collection.def.subtitle" class="text-[15px] text-fg-muted mt-1">
+          {{ collection.def.subtitle }}
+        </div>
+        <div class="text-[13px] text-fg-subtle mt-0.5">
+          {{ collection.tracks.length }} 首
+          <template v-if="totalTime"> · {{ fmtTotal(totalTime) }}</template>
+        </div>
+
+        <div class="mt-5 flex items-center gap-3 justify-center lg:justify-start">
+          <button
+            class="flex items-center gap-2 px-5 h-10 rounded-full bg-solid text-on-solid text-[15px] font-medium hover:opacity-85 transition"
+            @click="playAll"
+          >
+            <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M8 5v14l11-7z" /></svg>
+            播放
+          </button>
+          <button
+            class="flex items-center gap-2 px-5 h-10 rounded-full bg-fill text-fg text-[15px] font-medium hover:bg-fill-strong transition"
+            @click="shuffleAll"
+          >
+            <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current">
+              <path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
+            </svg>
+            随机播放
+          </button>
+        </div>
       </div>
     </div>
 
