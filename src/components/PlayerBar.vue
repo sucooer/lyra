@@ -55,23 +55,24 @@ function onSeek(e: MouseEvent) {
 </script>
 
 <template>
-  <div
-    v-if="player.currentTrack"
-    class="relative z-30 border-t border-line bg-bar backdrop-blur-xl"
-  >
-    <!-- 桌面端：顶部细进度条（hover 加深） -->
-    <div
-      class="hidden md:block absolute -top-[3px] left-0 right-0 h-[6px] cursor-pointer group"
-      @click="onSeek"
-    >
-      <div class="h-[3px] mt-[3px] bg-track group-hover:h-[5px] group-hover:mt-[1px] transition-all">
-        <div class="h-full bg-fg group-hover:bg-music transition-colors" :style="{ width: progress + '%' }"></div>
-      </div>
-    </div>
+  <!-- 浮起的圆角胶囊（Apple Music 新版迷你播放条），无歌曲时也保留位置 -->
+  <div class="relative z-30 px-2 pt-1 pb-2 sm:px-3 sm:pb-3">
+    <div class="relative rounded-2xl border border-line bg-bar backdrop-blur-xl overflow-hidden">
+      <!-- ===== 有歌曲：完整控制条 ===== -->
+      <template v-if="player.currentTrack">
+        <!-- 桌面端：胶囊顶部细进度条（hover 加深） -->
+        <div
+          class="hidden md:block absolute top-0 left-3 right-3 h-[6px] cursor-pointer group z-10"
+          @click="onSeek"
+        >
+          <div class="h-[3px] mt-[3px] bg-track group-hover:h-[5px] group-hover:mt-[1px] transition-all rounded-full">
+            <div class="h-full bg-fg group-hover:bg-music transition-colors rounded-full" :style="{ width: progress + '%' }"></div>
+          </div>
+        </div>
 
-    <div class="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 h-14 sm:h-16">
-      <!-- 封面 + 信息（点击展开全屏；移动端占满剩余宽度） -->
-      <button
+        <div class="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 h-14 sm:h-16">
+          <!-- 封面 + 信息（点击展开全屏；移动端占满剩余宽度） -->
+          <button
         class="flex items-center gap-3 min-w-0 flex-1 md:flex-none md:w-64 text-left"
         @click="player.showNowPlaying = true"
       >
@@ -166,6 +167,27 @@ function onSeek(e: MouseEvent) {
       <div class="flex justify-between mt-1.5 text-[10px] text-fg-subtle tabular-nums">
         <span>{{ fmt(shownCurrent) }}</span>
         <span>-{{ fmt(Math.max(0, player.duration - shownCurrent)) }}</span>
+      </div>
+      </div>
+      </template>
+
+      <!-- ===== 无歌曲：Apple Music 式空播放条（封面占位 + 灰掉的控制键） ===== -->
+      <div v-else class="flex items-center justify-between pl-3 pr-5 h-14 sm:h-16">
+        <div
+          class="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-fill flex items-center justify-center text-fg-subtle shrink-0"
+        >
+          <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current">
+            <path d="M12 3v11.3A3.7 3.7 0 1 0 14 17.7V7h5V3h-7z" />
+          </svg>
+        </div>
+        <div class="flex items-center gap-6 text-fg-subtle/70" aria-hidden="true">
+          <svg viewBox="0 0 24 24" class="w-8 h-8 fill-current">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <svg viewBox="0 0 24 24" class="w-8 h-8 fill-current">
+            <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
+          </svg>
+        </div>
       </div>
     </div>
   </div>

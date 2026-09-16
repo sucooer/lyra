@@ -55,6 +55,8 @@ export const usePlayerStore = defineStore('player', {
     shuffle: false,
     repeat: 'off' as RepeatMode,
     showNowPlaying: false,
+    /** 「接下来播放」队列：存 track id，按顺序优先于列表顺序播放 */
+    upNext: [] as string[],
     audio: null as HTMLAudioElement | null,
   }),
 
@@ -212,6 +214,17 @@ export const usePlayerStore = defineStore('player', {
         this.audio!.play().catch(() => {})
         return
       }
+      // 「接下来播放」队列优先于列表顺序（也优先于随机）
+      if (this.upNext.length > 0) {
+        const id = this.upNext[0]
+        this.upNext = this.upNext.slice(1)
+        const queued = this.tracks.findIndex((t) => t.id === id)
+        if (queued >= 0) {
+          this.play(queued)
+          return
+        }
+        // 目标已被删除则继续往下走
+      }
       let idx: number
       if (this.shuffle && this.tracks.length > 1) {
         do {
@@ -257,9 +270,24 @@ export const usePlayerStore = defineStore('player', {
       this.repeat = modes[(modes.indexOf(this.repeat) + 1) % modes.length]
     },
 
+    /** 「接下来播放」：插到队首，多次操作后点的那首排在最前（与 Apple Music 一致） */
+    playNext(id: string) {
+      if (!this.tracks.some((t) => t.id === id)) return
+      if (this.currentTrack?.id === id) return
+      this.upNext = [id, ...this.upNext.filter((x) => x !== id)]
+    },
+
+    /** 「最后播放」：追加到队尾 */
+    playLast(id: string) {
+      if (!this.tracks.some((t) => t.id === id)) return
+      if (this.currentTrack?.id === id) return
+      this.upNext = [...this.upNext.filter((x) => x !== id), id]
+    },
+
     remove(id: string) {
       const i = this.tracks.findIndex((t) => t.id === id)
       if (i < 0) return
+      this.upNext = this.upNext.filter((x) => x !== id)
       const t = this.tracks[i]
       revokeCover(t.meta?.coverUrl)
       this.tracks.splice(i, 1)
@@ -277,6 +305,7 @@ export const usePlayerStore = defineStore('player', {
         revokeCover(t.meta?.coverUrl)
       }
       this.tracks = []
+      this.upNext = []
       this.audio?.pause()
       this.currentIndex = -1
       this.playing = false
