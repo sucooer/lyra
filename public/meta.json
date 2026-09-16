@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T14:26:10.435Z",
+  "generatedAt": "2026-09-16T15:07:34.192Z",
   "tracks": {
     "https://img.520717.xyz/file/1789471325044_02._%E7%B2%89%E9%9B%AA.flac": {
       "title": "粉雪",
@@ -10,7 +10,7 @@
       "trackNo": 2,
       "duration": 322.4959863945578,
       "codec": "FLAC",
-      "bitrate": 0,
+      "bitrate": 943,
       "sampleRate": 44100,
       "cover": "/covers/1c823f61f55d.jpg",
       "lyricsUrl": "/lyrics/c68b9185febc.json"
@@ -24,7 +24,7 @@
       "trackNo": 1,
       "duration": 256.62666666666667,
       "codec": "FLAC",
-      "bitrate": 816,
+      "bitrate": 842,
       "sampleRate": 44100,
       "cover": "/covers/a3c63220f119.jpg",
       "lyricsUrl": "/lyrics/90a2128730a9.json"
@@ -38,7 +38,7 @@
       "trackNo": 4,
       "duration": 169.33333333333334,
       "codec": "FLAC",
-      "bitrate": 1054,
+      "bitrate": 1094,
       "sampleRate": 44100,
       "cover": "/covers/a3c63220f119.jpg",
       "lyricsUrl": "/lyrics/a52e05173118.json"
@@ -52,7 +52,7 @@
       "trackNo": 1,
       "duration": 218.54666666666665,
       "codec": "FLAC",
-      "bitrate": 842,
+      "bitrate": 851,
       "sampleRate": 44100,
       "cover": "/covers/bdbf9f9e83bc.jpg",
       "lyricsUrl": "/lyrics/bd68893e568d.json"
@@ -66,7 +66,7 @@
       "trackNo": 5,
       "duration": 209.69333333333333,
       "codec": "FLAC",
-      "bitrate": 727,
+      "bitrate": 737,
       "sampleRate": 44100,
       "cover": "/covers/bdbf9f9e83bc.jpg",
       "lyricsUrl": "/lyrics/d77786928fb6.json"
@@ -94,7 +94,7 @@
       "trackNo": 1,
       "duration": 232.8818125,
       "codec": "FLAC",
-      "bitrate": 1921,
+      "bitrate": 1926,
       "sampleRate": 48000,
       "cover": "/covers/1e7cf2ad21e8.jpg",
       "lyricsUrl": "/lyrics/bf0b310f0dad.json"
@@ -108,7 +108,7 @@
       "trackNo": 2,
       "duration": 222.52,
       "codec": "FLAC",
-      "bitrate": 1042,
+      "bitrate": 1056,
       "sampleRate": 44100,
       "cover": "/covers/61bee25c0128.jpg",
       "lyricsUrl": "/lyrics/43c670e9fbd4.json"
@@ -122,7 +122,7 @@
       "trackNo": 5,
       "duration": 279.24,
       "codec": "FLAC",
-      "bitrate": 1047,
+      "bitrate": 1058,
       "sampleRate": 44100,
       "cover": "/covers/61bee25c0128.jpg",
       "lyricsUrl": "/lyrics/085d18547137.json"
@@ -136,7 +136,7 @@
       "trackNo": 9,
       "duration": 256.5733333333333,
       "codec": "FLAC",
-      "bitrate": 1065,
+      "bitrate": 1084,
       "sampleRate": 44100,
       "cover": "/covers/84812827ed71.jpg",
       "lyricsUrl": "/lyrics/94bea824ffb4.json"
@@ -150,7 +150,7 @@
       "trackNo": 4,
       "duration": 255.04,
       "codec": "FLAC",
-      "bitrate": 959,
+      "bitrate": 979,
       "sampleRate": 44100,
       "cover": "/covers/84812827ed71.jpg",
       "lyricsUrl": "/lyrics/21e32423d8ab.json"
@@ -164,7 +164,7 @@
       "trackNo": 1,
       "duration": 309.66267573696143,
       "codec": "FLAC",
-      "bitrate": 857,
+      "bitrate": 894,
       "sampleRate": 44100,
       "cover": "/covers/cca5bba7b87e.jpg",
       "lyricsUrl": "/lyrics/00b669233d66.json"
@@ -178,7 +178,7 @@
       "trackNo": 1,
       "duration": 223.64142857142858,
       "codec": "FLAC",
-      "bitrate": 1018,
+      "bitrate": 1082,
       "sampleRate": 44100,
       "cover": "/covers/2d0f614e38c7.jpg",
       "lyricsUrl": "/lyrics/538a4f3bd7ef.json"
@@ -192,7 +192,7 @@
       "trackNo": 9,
       "duration": 221,
       "codec": "FLAC",
-      "bitrate": 971,
+      "bitrate": 1045,
       "sampleRate": 44100,
       "cover": "/covers/c34789d1ecff.jpg",
       "lyricsUrl": "/lyrics/4ee1b5f91416.json"
@@ -206,7 +206,7 @@
       "trackNo": 10,
       "duration": 232.44025,
       "codec": "FLAC",
-      "bitrate": 1719,
+      "bitrate": 1723,
       "sampleRate": 48000,
       "cover": "/covers/eb485451f705.jpg",
       "lyricsUrl": "/lyrics/43228d673023.json"
@@ -220,7 +220,7 @@
       "trackNo": 5,
       "duration": 247.0174829931973,
       "codec": "FLAC",
-      "bitrate": 1061,
+      "bitrate": 1067,
       "sampleRate": 44100,
       "cover": "/covers/bffe8d288fce.jpg",
       "lyricsUrl": "/lyrics/e96e2100dda7.json"
@@ -234,7 +234,7 @@
       "trackNo": 6,
       "duration": 236.25333333333333,
       "codec": "FLAC",
-      "bitrate": 3,
+      "bitrate": 996,
       "sampleRate": 44100,
       "cover": "/covers/bffe8d288fce.jpg",
       "lyricsUrl": "/lyrics/5e977f35c8c9.json"
