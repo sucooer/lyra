@@ -55,9 +55,19 @@ export function setTheme(m: ThemeMode) {
   sync()
 }
 
-/** 点击循环：跟随系统 → 浅色 → 深色 */
+/**
+ * 点击循环：跟随系统 → 与系统相反 → 与系统一致 → 跟随系统
+ *
+ * 顺序不能写成 auto → light → dark：那样当系统恰好是浅色时，
+ * 初始（auto）画面本身就是浅色，第一次点击 auto→light 视觉上毫无变化，
+ * 用户会以为"要点两下才生效"。所以第一步先跳到"与系统相反的那一态"，
+ * 保证前两次点击都能立刻看到变化。
+ */
 export function cycleTheme() {
-  setTheme(themeMode.value === 'auto' ? 'light' : themeMode.value === 'light' ? 'dark' : 'auto')
+  const opposite = systemDark.value ? 'light' : 'dark'
+  const follow = systemDark.value ? 'dark' : 'light'
+  const m = themeMode.value
+  setTheme(m === 'auto' ? opposite : m === opposite ? follow : 'auto')
 }
 
 export function initTheme() {
