@@ -10,18 +10,29 @@ import {
 } from '../lib/metadata'
 import type { LyricLine } from '../lib/lrc'
 import { setupMediaSession, updateMediaSession, updatePositionState } from '../lib/mediaSession'
-import { filenameOf } from '../lib/track'
+import { filenameOf, stableId } from '../lib/track'
 import {
   normalizePlaylists,
   playlistMatches,
   isRadio,
   type PlaylistDef,
 } from '../lib/playlists'
+import {
+  parsePlaylist,
+  applyOverride,
+  type TrackOverride,
+  type PlaylistEntry,
+} from '../lib/playlist'
 
 export interface Track {
+  /** 由 stableId(url) 得出，跨会话稳定；收藏/历史类功能靠它对齐同一首歌 */
   id: string
   url: string
   meta: TrackMeta | null
+  /** playlist.json 里为这首写的人工覆写；每次解析出新元数据后都会重新叠上去 */
+  override?: TrackOverride
+  /** 覆写里的标签，供歌单规则匹配（单独拎出来，规则层不需要知道 override 结构） */
+  tags: string[]
   /** 同步歌词；预生成路径下由 loadLyrics() 在播放到该曲目时按需填充 */
   lyrics: LyricLine[]
   /** 预生成的歌词文件路径（meta.json 的 lyricsUrl）；undefined = 该曲目无歌词 */
@@ -49,10 +60,6 @@ export type RepeatMode = 'off' | 'all' | 'one'
 const PLAYLIST_URL = '/playlist.json'
 const META_URL = '/meta.json'
 const LISTS_URL = '/playlists.json'
-
-function uid(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
-}
 
 /** 只回收运行时解析产生的 blob 封面；预生成的封面是普通路径，不能 revoke */
 function revokeCover(url?: string) {
@@ -185,26 +192,31 @@ export const usePlayerStore = defineStore('player', {
     },
 
     /**
-     * 批量添加直链
-     * @param cached 来自 public/meta.json 的预解析结果，命中则直接渲染、不再联网解析
+     * 批量添加曲目
+     * @param entries 来自 playlist.json，已解析成「直链 + 人工覆写」
+     * @param cached  来自 public/meta.json 的预解析结果，命中则直接渲染、不再联网解析
      */
-    addUrls(urls: string[], cached: Record<string, CachedMeta> = {}) {
+    addUrls(entries: PlaylistEntry[], cached: Record<string, CachedMeta> = {}) {
       const added: Track[] = []
-      for (const raw of urls) {
-        const url = raw.trim()
-        if (!/^https?:\/\//i.test(url)) continue
+      for (const entry of entries) {
+        const { url } = entry
         if (this.tracks.some((t) => t.url === url)) continue
+        const hit = cached[url]
         // 必须用 reactive() 包一层：否则后续 loadMeta 拿到的是 raw 引用，
         // 对它的赋值不会触发界面更新（表现为永远"解析中…"）
-        const hit = cached[url]
         added.push(
           reactive({
-            id: uid(),
+            id: stableId(url),
             url,
-            meta: hit ? cachedToMeta(hit) : null,
+            override: entry.override ?? undefined,
+            tags: entry.override?.tags ?? [],
+            // 覆写先叠一次：即使 meta.json 没缓存、网络还没回，
+            // 人工写死的标题/歌手/封面也能立刻显示出来
+            meta: applyOverride(hit ? cachedToMeta(hit) : null, entry.override),
             lyrics: [] as LyricLine[],
             lyricsUrl: hit?.lyricsUrl ?? undefined,
             lyricsLoaded: false,
+            // 有覆写不代表元数据齐全（时长、码率还得联网拿），只看缓存有没有命中
             loading: !hit,
           }),
         )
@@ -214,7 +226,7 @@ export const usePlayerStore = defineStore('player', {
       // 等真正播放到该曲目时由 loadLyrics() 拉取。否则歌单有多少首，
       // 首屏就有多少个并发请求（100 首 = 100 个）。
       for (const t of added) {
-        if (!t.meta) this.loadMeta(t)
+        if (t.loading) this.loadMeta(t)
       }
     },
 
@@ -224,7 +236,10 @@ export const usePlayerStore = defineStore('player', {
       try {
         const parsed = await parseTrackMeta(track.url, filenameOf(track.url))
         const { lyrics, plainLyrics, ...meta } = parsed
-        track.meta = meta
+        // 落地前回收可能存在的旧 blob 封面（覆写用的是静态路径，不受影响）
+        revokeCover(track.meta?.coverUrl)
+        // 刚解析出来的是音频里的原始 tag，人工覆写要再叠一次才算最终值
+        track.meta = applyOverride(meta, track.override)
         track.lyrics = lyrics
         track.plainLyrics = plainLyrics
         if (lyrics.length === 0 && !plainLyrics) {
@@ -232,11 +247,14 @@ export const usePlayerStore = defineStore('player', {
         }
       } catch (e) {
         track.error = String(e)
-        track.meta = {
-          title: filenameOf(track.url).replace(/\.[a-z0-9]+$/i, ''),
-          artist: '',
-          album: '',
-        }
+        track.meta = applyOverride(
+          {
+            title: filenameOf(track.url).replace(/\.[a-z0-9]+$/i, ''),
+            artist: '',
+            album: '',
+          },
+          track.override,
+        )
       } finally {
         track.lyricsLoaded = true
         track.loading = false
@@ -467,8 +485,6 @@ export const usePlayerStore = defineStore('player', {
           fetch(LISTS_URL, { cache: 'no-store' }).catch(() => null),
         ])
         if (!plResp.ok) return
-        const data = await plResp.json()
-        if (!Array.isArray(data)) return
 
         let cached: Record<string, CachedMeta> = {}
         if (metaResp?.ok) {
@@ -478,7 +494,8 @@ export const usePlayerStore = defineStore('player', {
             /* meta.json 损坏则全部走运行时解析 */
           }
         }
-        this.addUrls(data.filter((u: unknown) => typeof u === 'string'), cached)
+        // playlist.json 支持纯字符串与对象（带人工覆写字段）混排，统一在 parsePlaylist 里消化
+        this.addUrls(parsePlaylist(await plResp.json()), cached)
 
         this.radioSeed = (Math.random() * 0xffffffff) >>> 0
         if (listsResp?.ok) {

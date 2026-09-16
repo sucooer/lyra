@@ -181,12 +181,31 @@ function toCached(meta, coverRelPath, lyricsUrl) {
   }
 }
 
+/**
+ * playlist.json 支持纯字符串与对象混排：
+ *   "https://.../a.flac"
+ *   { "url": "https://.../b.flac", "title": "...", "tags": [...] }
+ * 对象形式里的覆写字段由前端在显示时合并，这里只负责取出直链去解析。
+ */
+function toUrls(raw) {
+  if (!Array.isArray(raw)) return []
+  const out = []
+  const seen = new Set()
+  for (const item of raw) {
+    let url = ''
+    if (typeof item === 'string') url = item.trim()
+    else if (item && typeof item === 'object' && typeof item.url === 'string') url = item.url.trim()
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue
+    seen.add(url)
+    out.push(url)
+  }
+  return out
+}
+
 async function main() {
   let urls
   try {
-    urls = JSON.parse(await readFile(PLAYLIST, 'utf8')).filter(
-      (u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim()),
-    )
+    urls = toUrls(JSON.parse(await readFile(PLAYLIST, 'utf8')))
   } catch (e) {
     // 读不了歌单不能挡构建（部署平台跑 build 时尤其如此），警告后跳过
     console.warn('[gen-meta] 读取 playlist.json 失败，跳过预生成：', e?.message ?? e)

@@ -5,7 +5,7 @@
 ## 功能
 
 - 🎵 **直链播放**：在 `public/playlist.json` 里填写音频直链（FLAC / MP3 / M4A / OGG / WAV），刷新即加载
-- 📝 **歌单即文件**：歌单就是仓库里的 `public/playlist.json`，一行一个 url，无界面管理
+- 📝 **曲库即文件**：`public/playlist.json` 一行一个直链，无界面管理；写成对象时还能人工覆写标题 / 歌手 / 封面 / 标签
 - 📻 **电台**：一键把资料库全部歌曲乱序无限播放；封面每次点播程序化随机生成
 - 💽 **歌单卡片**：`public/playlists.json` 自定义歌单（按歌手/专辑/曲名筛选），首页推荐区卡片式展示，封面自动取成员专辑封面拼贴
 - 🏷️ **元数据解析**：浏览器端用 `music-metadata` v11 解析内嵌封面、标题、歌手、专辑、歌词（ID3v2 / Vorbis Comment / MP4 atom）
@@ -17,13 +17,36 @@
 
 ## 更新歌单
 
-1. 编辑 `public/playlist.json`，往数组里加音频直链（字符串数组，中文文件名需百分号编码）
+1. 编辑 `public/playlist.json`，往数组里加音频直链（中文文件名需百分号编码）
 2. `npm run build` 会自动先跑 `scripts/gen-meta.mjs` 解析新增条目（增量，已缓存的跳过）
 3. 本地开发想即时预览，可手动跑一次 `pnpm meta` 再刷新页面
+
+每条既可以写成纯字符串，也可以写成对象来**人工覆写**音频里解析出来的信息：
+
+```jsonc
+[
+  "https://.../a.flac",
+  {
+    "url": "https://.../b.flac",
+    "title": "粉雪",               // 内嵌 tag 写错/缺失时在这里改
+    "artist": "レミオロメン",        // 不写就等于沿用音频里的值
+    "album": "...",
+    "cover": "/covers/xxxx.jpg",   // 换成自己的封面图
+    "tags": ["日系", "冬季"]        // 自由标签，供 playlists.json 按标签分组
+  }
+]
+```
+
+覆写是**在前端显示时合并**的：改完刷新页面就生效，不必重跑 `gen-meta`。
+两种写法可以混排，纯字符串的旧格式完全不受影响。
 
 `meta.json` / `covers/` / `lyrics/` 都在 `.gitignore` 里，不会提交到仓库；部署时由构建步骤现生成。
 强制全量重跑：`node scripts/gen-meta.mjs --force`；只重跑某一条：`--only <下标>`。
 某条解析失败不影响构建，该曲目会退回浏览器端解析。
+
+**曲目 id 是稳定的**：由直链哈希得出（`stableId()`），同一首歌在任何设备、任何会话
+拿到的都是同一个 id。收藏、播放历史、自定义排序这类需要跨会话记住一首歌的功能都依赖它，
+所以不要往 `Track.id` 里塞随机值——那会让存下来的引用下次全部失效。
 
 **歌词是独立文件**：`meta.json` 里只存一个 `lyricsUrl` 指针，真正的歌词放在
 `public/lyrics/<hash>.json`。歌词占了元数据的绝大部分体积，而列表页一个字都用不到，
@@ -45,6 +68,7 @@
     "subtitle": "抒情慢歌",
     "artists": ["Enya", "M2M"]           // 精确匹配（忽略大小写/首尾空格），任一命中即收录
     // 也可用 titles / albums / urls（曲目直链）；"all": true 表示收录全部
+    // tags 匹配的是 playlist.json 对象写法里人工写的标签，不依赖音频内嵌 tag
   }
 ]
 ```
