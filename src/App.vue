@@ -3,7 +3,7 @@ import { computed, onMounted } from 'vue'
 import { usePlayerStore } from './stores/player'
 import { setupShortcuts } from './lib/shortcuts'
 import { initTheme, cycleTheme, themeMode, resolvedDark, themeLabel } from './lib/theme'
-import { activePlaylistId, goHome } from './lib/nav'
+import { activePlaylistId, goHome, initNav } from './lib/nav'
 import PlayerBar from './components/PlayerBar.vue'
 import NowPlaying from './components/NowPlaying.vue'
 import Home from './components/Home.vue'
@@ -20,6 +20,7 @@ const current = computed(() =>
 const headerTitle = computed(() => (current.value ? current.value.def.title : '音乐'))
 
 onMounted(() => {
+  initNav()
   initTheme()
   player.initAudio()
   player.restore()

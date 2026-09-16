@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { usePlayerStore } from '../stores/player'
-import { goHome } from '../lib/nav'
+import { goHome, openNowPlaying } from '../lib/nav'
 import { fmtTime } from '../lib/track'
 import PlaylistCover from './PlaylistCover.vue'
 import TrackRow from './TrackRow.vue'
@@ -48,7 +48,7 @@ function shuffleAll() {
 
 function openInPlayer() {
   if (player.currentTrack && ids.value.includes(player.currentTrack.id)) {
-    player.showNowPlaying = true
+    openNowPlaying()
   }
 }
 </script>

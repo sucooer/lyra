@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { usePlayerStore } from '../stores/player'
+import { openNowPlaying } from '../lib/nav'
 
 const player = usePlayerStore()
 
@@ -66,7 +67,7 @@ function fmt(sec: number): string {
         <div class="flex items-center gap-3 pl-3 pr-4 sm:pl-4 sm:pr-6 pt-3 sm:pt-3.5">
           <button
             class="flex items-center gap-3.5 min-w-0 flex-1 text-left"
-            @click="player.showNowPlaying = true"
+            @click="openNowPlaying()"
           >
             <div
               class="w-13 h-13 sm:w-14 sm:h-14 rounded-[16px] overflow-hidden bg-fill shrink-0"

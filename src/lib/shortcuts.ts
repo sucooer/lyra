@@ -3,6 +3,7 @@
  * 空格: 播放/暂停  ←/→: 快退/快进5s  ↑/↓: 音量  n/p: 下一首/上一首  f: 全屏播放页
  */
 import type { usePlayerStore } from '../stores/player'
+import { openNowPlaying, closeNowPlaying } from './nav'
 
 type Store = ReturnType<typeof usePlayerStore>
 
@@ -39,7 +40,10 @@ export function setupShortcuts(player: Store) {
         player.prev()
         break
       case 'KeyF':
-        if (player.currentTrack) player.showNowPlaying = !player.showNowPlaying
+        if (!player.currentTrack) break
+        // 走导航层而不是直接赋值：展开页也要在浏览器历史里留一层，侧滑返回才能收起它
+        if (player.showNowPlaying) closeNowPlaying()
+        else openNowPlaying()
         break
     }
   })

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import LyricsView from './LyricsView.vue'
 import { resolvedDark } from '../lib/theme'
+import { closeNowPlaying } from '../lib/nav'
 
 const player = usePlayerStore()
 const showLyrics = ref(false)
@@ -125,7 +126,7 @@ function fmt(sec: number): string {
     <div class="relative z-10 flex items-center justify-between px-5 md:px-8 pt-5">
       <button
         class="w-9 h-9 rounded-full bg-np-btn hover:bg-np-fill flex items-center justify-center transition"
-        @click="player.showNowPlaying = false"
+        @click="closeNowPlaying()"
         title="收起"
       >
         <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
