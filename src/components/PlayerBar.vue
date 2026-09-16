@@ -56,11 +56,9 @@ function fmt(sec: number): string {
 </script>
 
 <template>
-  <!-- 浮起的圆角卡片（对齐 Apple Music 迷你播放条），无歌曲时也保留位置 -->
-  <div class="relative z-30 px-2 pt-1 pb-2 sm:px-3 sm:pb-3">
-    <div
-      class="relative rounded-[32px] bg-bar backdrop-blur-xl overflow-hidden shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
-    >
+  <!-- 浮起的圆角玻璃条（对齐 Apple Music 迷你播放条），无歌曲时也保留位置 -->
+  <div class="absolute inset-x-0 bottom-0 z-30 px-2 pb-2 sm:px-3 sm:pb-3">
+    <div class="relative rounded-[32px] bar-glass overflow-hidden">
       <!-- ===================== 有歌曲 ===================== -->
       <template v-if="player.currentTrack">
         <!-- 第一行：封面 / 曲目信息 / 官方双键控制 -->

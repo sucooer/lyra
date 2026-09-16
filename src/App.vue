@@ -76,12 +76,15 @@ onMounted(() => {
       </button>
     </header>
 
-    <main class="flex-1 min-h-0 overflow-y-auto pb-4">
-      <PlaylistView v-if="activePlaylistId" :id="activePlaylistId" />
-      <Home v-else />
-    </main>
+    <!-- 滚动区与播放条同层：内容从半透明播放条底下穿过去，玻璃才模糊得到东西 -->
+    <div class="relative flex-1 min-h-0">
+      <main class="absolute inset-0 overflow-y-auto pb-[150px]">
+        <PlaylistView v-if="activePlaylistId" :id="activePlaylistId" />
+        <Home v-else />
+      </main>
+      <PlayerBar />
+    </div>
 
-    <PlayerBar />
     <TrackMenu />
 
     <Transition name="now-playing">

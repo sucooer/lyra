@@ -39,8 +39,11 @@
   --app-fill: rgba(0, 0, 0, 0.05);
   --app-fill-strong: rgba(0, 0, 0, 0.09);
   --app-line: rgba(0, 0, 0, 0.1);
-  /* 播放条：对齐 Apple Music 迷你播放条的灰色材质（在浅色页面上混出 ~#e9e9e9） */
-  --app-bar: rgba(120, 120, 128, 0.16);
+  /* 播放条玻璃材质：薄雾 + 模糊，底下的内容要能透出来（对齐 Apple Music 迷你播放条） */
+  --app-bar: rgba(252, 252, 253, 0.45);
+  /* 上沿内高光 / 外描边：让玻璃有厚度，不是一块平色矩形 */
+  --app-bar-rim: rgba(255, 255, 255, 0.9);
+  --app-bar-line: rgba(0, 0, 0, 0.06);
   --app-track: rgba(0, 0, 0, 0.12);
   --app-scrim: rgba(255, 255, 255, 0.7);
   --app-solid: #000000;
@@ -64,7 +67,9 @@
     --app-fill: rgba(255, 255, 255, 0.08);
     --app-fill-strong: rgba(255, 255, 255, 0.14);
     --app-line: rgba(255, 255, 255, 0.1);
-    --app-bar: rgba(50, 50, 52, 0.72);
+    --app-bar: rgba(28, 28, 30, 0.5);
+    --app-bar-rim: rgba(255, 255, 255, 0.12);
+    --app-bar-line: rgba(255, 255, 255, 0.08);
     --app-track: rgba(255, 255, 255, 0.18);
     --app-scrim: rgba(0, 0, 0, 0.5);
     --app-solid: #ffffff;
@@ -88,7 +93,9 @@
   --app-fill: rgba(255, 255, 255, 0.08);
   --app-fill-strong: rgba(255, 255, 255, 0.14);
   --app-line: rgba(255, 255, 255, 0.1);
-  --app-bar: rgba(50, 50, 52, 0.72);
+  --app-bar: rgba(28, 28, 30, 0.5);
+  --app-bar-rim: rgba(255, 255, 255, 0.12);
+  --app-bar-line: rgba(255, 255, 255, 0.08);
   --app-track: rgba(255, 255, 255, 0.18);
   --app-scrim: rgba(0, 0, 0, 0.5);
   --app-solid: #ffffff;
@@ -119,6 +126,21 @@ body {
 /* 主题切换时的柔和过渡 */
 #app {
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/*
+ * 迷你播放条的玻璃材质。
+ * 关键：容器必须让滚动内容从它底下经过（见 App.vue 的 relative/absolute 布局），
+ * backdrop-filter 才有东西可模糊；否则底下只有页面底色，看起来就是一块平色矩形。
+ */
+.bar-glass {
+  background-color: var(--app-bar);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  backdrop-filter: blur(26px) saturate(180%);
+  border: 1px solid var(--app-bar-line);
+  box-shadow:
+    inset 0 1px 0 0 var(--app-bar-rim),
+    0 10px 30px rgba(0, 0, 0, 0.14);
 }
 
 /* 细滚动条 */
