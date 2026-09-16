@@ -9,7 +9,7 @@
 - 📻 **电台**：一键把资料库全部歌曲乱序无限播放；封面每次点播程序化随机生成
 - 💽 **歌单卡片**：`public/playlists.json` 自定义歌单（按歌手/专辑/曲名筛选），首页推荐区卡片式展示，封面自动取成员专辑封面拼贴
 - 🏷️ **元数据解析**：浏览器端用 `music-metadata` v11 解析内嵌封面、标题、歌手、专辑、歌词（ID3v2 / Vorbis Comment / MP4 atom）
-- ⚡ **预解析缓存**：构建时自动生成 `public/meta.json` + `public/covers/`（已 gitignore，不入库），首页直接渲染，不再联网解析
+- ⚡ **预解析缓存**：构建时自动生成 `public/meta.json` + `public/covers/` + `public/lyrics/`（已 gitignore，不入库），首页直接渲染，不再联网解析
 - ⚡ **Range 分块**：未预解析的条目在浏览器端按需解析，只下载文件头部（默认 2MB），40MB FLAC 秒开信息
 - 📜 **滚动歌词**：内嵌 LRC / SYLT 同步歌词逐行高亮滚动，支持点击跳转；自动尝试同路径 `.lrc` 外挂歌词。播放页右上角引号按钮切换歌词视图
 - 🍎 **Apple Music 风格**：全屏播放页、封面主色调提取模糊背景、底部迷你播放栏、播放/暂停缩放动画
@@ -21,9 +21,14 @@
 2. `npm run build` 会自动先跑 `scripts/gen-meta.mjs` 解析新增条目（增量，已缓存的跳过）
 3. 本地开发想即时预览，可手动跑一次 `pnpm meta` 再刷新页面
 
-`meta.json` / `covers/` 都在 `.gitignore` 里，不会提交到仓库；部署时由构建步骤现生成。
+`meta.json` / `covers/` / `lyrics/` 都在 `.gitignore` 里，不会提交到仓库；部署时由构建步骤现生成。
 强制全量重跑：`node scripts/gen-meta.mjs --force`；只重跑某一条：`--only <下标>`。
 某条解析失败不影响构建，该曲目会退回浏览器端解析。
+
+**歌词是独立文件**：`meta.json` 里只存一个 `lyricsUrl` 指针，真正的歌词放在
+`public/lyrics/<hash>.json`。歌词占了元数据的绝大部分体积，而列表页一个字都用不到，
+拆开后 `meta.json` 从 36KB 降到约 4KB，且只在播放到某首曲目时才拉取那一首的歌词。
+从旧版本升级时，首次运行脚本会把已缓存的歌词自动迁出，不需要重新下载音频。
 
 ## 自定义歌单与电台
 

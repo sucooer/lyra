@@ -18,8 +18,15 @@ export interface TrackMeta {
   codec?: string
   bitrate?: number
   sampleRate?: number
-  /** 封面 ObjectURL（由调用方负责 revoke） */
+  /** 封面 ObjectURL（由调用方负责 revoke）或站点内静态路径 */
   coverUrl?: string
+}
+
+/**
+ * 运行时解析（直链现解）的结果：元数据 + 内嵌歌词。
+ * 歌词不挂在 TrackMeta 上——预生成路径下它是单独按需拉取的，两条路径在这里统一。
+ */
+export interface ParsedTrack extends TrackMeta {
   /** 同步歌词 */
   lyrics: LyricLine[]
   /** 非同步纯文本歌词（内嵌但非 LRC 格式时） */
@@ -74,7 +81,7 @@ function mimeFromUrl(url: string): string | undefined {
   return ext ? map[ext] : undefined
 }
 
-function toMeta(ia: IAudioMetadata, coverUrl?: string): TrackMeta {
+function toMeta(ia: IAudioMetadata, coverUrl?: string): ParsedTrack {
   const c = ia.common
   let lyrics: LyricLine[] = []
   let plainLyrics: string | undefined
@@ -138,8 +145,8 @@ export interface CachedMeta {
   sampleRate?: number | null
   /** 相对站点根的封面路径，如 /covers/xxxx.jpg */
   cover?: string | null
-  lyrics: LyricLine[]
-  plainLyrics?: string | null
+  /** 相对站点根的歌词文件路径，如 /lyrics/xxxx.json；null = 该曲目没有内嵌歌词 */
+  lyricsUrl?: string | null
 }
 
 export function cachedToMeta(c: CachedMeta): TrackMeta {
@@ -155,8 +162,39 @@ export function cachedToMeta(c: CachedMeta): TrackMeta {
     bitrate: c.bitrate ?? undefined,
     sampleRate: c.sampleRate ?? undefined,
     coverUrl: c.cover ?? undefined,
-    lyrics: c.lyrics ?? [],
-    plainLyrics: c.plainLyrics ?? undefined,
+  }
+}
+
+export interface CachedLyrics {
+  synced: LyricLine[]
+  plain?: string
+}
+
+/**
+ * 按需拉取预生成的歌词文件。
+ * 只在播放到该曲目时才调用，列表页完全不碰——这正是 meta.json 能瘦掉九成的原因。
+ */
+export async function fetchCachedLyrics(url: string): Promise<CachedLyrics> {
+  try {
+    const resp = await fetch(url)
+    if (!resp.ok) return { synced: [] }
+    const data: unknown = await resp.json()
+    const d = data as { synced?: unknown; plain?: unknown } | null
+
+    const synced: LyricLine[] = Array.isArray(d?.synced)
+      ? d.synced.flatMap((l) => {
+          const line = l as Partial<LyricLine>
+          return typeof line.text === 'string' &&
+            typeof line.time === 'number' &&
+            Number.isFinite(line.time)
+            ? [{ time: line.time, text: line.text }]
+            : []
+        })
+      : []
+    const plain = typeof d?.plain === 'string' && d.plain.length > 0 ? d.plain : undefined
+    return { synced, plain }
+  } catch {
+    return { synced: [] }
   }
 }
 
@@ -172,7 +210,7 @@ function extractCover(ia: IAudioMetadata): string | undefined {
  * @param url 音频直链
  * @param filename 无元数据时回退显示的文件名
  */
-export async function parseTrackMeta(url: string, filename = ''): Promise<TrackMeta> {
+export async function parseTrackMeta(url: string, filename = ''): Promise<ParsedTrack> {
   let useProxy = false
 
   for (let attempt = 0; attempt < 2; attempt++) {

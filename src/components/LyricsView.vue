@@ -92,8 +92,8 @@ onBeforeUnmount(() => cancelAnimationFrame(animId))
       </div>
     </template>
     <div v-else class="text-np-muted text-base pt-20 text-center select-none">
-      <template v-if="player.currentTrack?.meta?.plainLyrics">
-        <pre class="whitespace-pre-wrap text-left text-sm leading-relaxed font-sans">{{ player.currentTrack.meta.plainLyrics }}</pre>
+      <template v-if="player.currentTrack?.plainLyrics">
+        <pre class="whitespace-pre-wrap text-left text-sm leading-relaxed font-sans">{{ player.currentTrack.plainLyrics }}</pre>
       </template>
       <template v-else>暂无歌词</template>
     </div>

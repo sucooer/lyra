@@ -3,6 +3,7 @@ import { markRaw, reactive } from 'vue'
 import {
   parseTrackMeta,
   fetchSidecarLrc,
+  fetchCachedLyrics,
   cachedToMeta,
   type TrackMeta,
   type CachedMeta,
@@ -21,10 +22,20 @@ export interface Track {
   id: string
   url: string
   meta: TrackMeta | null
+  /** 同步歌词；预生成路径下由 loadLyrics() 在播放到该曲目时按需填充 */
   lyrics: LyricLine[]
+  /** 预生成的歌词文件路径（meta.json 的 lyricsUrl）；undefined = 该曲目无歌词 */
+  lyricsUrl?: string
+  /** 非同步纯文本歌词 */
+  plainLyrics?: string
+  /** 歌词是否已尝试加载过：区分「还没拉」和「确实没有」 */
+  lyricsLoaded: boolean
   loading: boolean
   error?: string
 }
+
+/** 正在拉取歌词的曲目 id，用于合并并发请求（非响应式数据，不必放进 state） */
+const lyricsPending = new Set<string>()
 
 /** 解析后的歌单：定义 + 当前命中的曲目 */
 export interface Collection {
@@ -191,23 +202,19 @@ export const usePlayerStore = defineStore('player', {
             id: uid(),
             url,
             meta: hit ? cachedToMeta(hit) : null,
-            lyrics: hit?.lyrics ?? [],
+            lyrics: [] as LyricLine[],
+            lyricsUrl: hit?.lyricsUrl ?? undefined,
+            lyricsLoaded: false,
             loading: !hit,
           }),
         )
       }
       this.tracks.push(...added)
+      // 这里刻意不为每条曲目探测歌词：预生成路径下歌词是独立文件，
+      // 等真正播放到该曲目时由 loadLyrics() 拉取。否则歌单有多少首，
+      // 首屏就有多少个并发请求（100 首 = 100 个）。
       for (const t of added) {
-        if (t.meta) {
-          // 预生成结果里没有歌词时，后台再试一次外挂 .lrc（不阻塞渲染）
-          if (t.lyrics.length === 0) {
-            fetchSidecarLrc(t.url).then((l) => {
-              if (l.length) t.lyrics = l
-            })
-          }
-        } else {
-          this.loadMeta(t)
-        }
+        if (!t.meta) this.loadMeta(t)
       }
     },
 
@@ -215,9 +222,12 @@ export const usePlayerStore = defineStore('player', {
       track.loading = true
       track.error = undefined
       try {
-        track.meta = await parseTrackMeta(track.url, filenameOf(track.url))
-        track.lyrics = track.meta.lyrics
-        if (track.lyrics.length === 0) {
+        const parsed = await parseTrackMeta(track.url, filenameOf(track.url))
+        const { lyrics, plainLyrics, ...meta } = parsed
+        track.meta = meta
+        track.lyrics = lyrics
+        track.plainLyrics = plainLyrics
+        if (lyrics.length === 0 && !plainLyrics) {
           track.lyrics = await fetchSidecarLrc(track.url)
         }
       } catch (e) {
@@ -226,10 +236,32 @@ export const usePlayerStore = defineStore('player', {
           title: filenameOf(track.url).replace(/\.[a-z0-9]+$/i, ''),
           artist: '',
           album: '',
-          lyrics: [],
         }
       } finally {
+        track.lyricsLoaded = true
         track.loading = false
+      }
+    },
+
+    /**
+     * 按需加载歌词：优先读预生成好的歌词文件，没有则退回同路径外挂 .lrc。
+     * 切到某首曲目时才调用；同一曲目只尝试一次，并发调用自动合并。
+     */
+    async loadLyrics(track: Track) {
+      if (track.lyricsLoaded || lyricsPending.has(track.id)) return
+      lyricsPending.add(track.id)
+      try {
+        if (track.lyricsUrl) {
+          const { synced, plain } = await fetchCachedLyrics(track.lyricsUrl)
+          track.lyrics = synced
+          track.plainLyrics = plain
+        }
+        if (track.lyrics.length === 0 && !track.plainLyrics) {
+          track.lyrics = await fetchSidecarLrc(track.url)
+        }
+      } finally {
+        lyricsPending.delete(track.id)
+        track.lyricsLoaded = true
       }
     },
 
@@ -245,6 +277,8 @@ export const usePlayerStore = defineStore('player', {
       this.duration = t.meta?.duration ?? 0
       updateMediaSession(this)
       a.play().catch(() => {})
+      // 歌词按需拉取：不阻塞播放，也不影响首屏
+      void this.loadLyrics(t)
     },
 
     /** 按 track id 播放（歌单详情页用，不改变播放上下文） */

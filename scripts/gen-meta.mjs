@@ -1,8 +1,12 @@
 /**
- * 预生成歌单元数据：public/playlist.json -> public/meta.json + public/covers/*
+ * 预生成歌单元数据：public/playlist.json -> public/meta.json + public/covers/* + public/lyrics/*
  *
  * 目的：音源线路慢（实测 2MB 头部要几分钟），运行时解析会导致首页长时间「解析中…」。
  * 改成开发/部署前跑一次本脚本，把标题/歌手/专辑/封面/歌词全部落盘，页面首屏直接渲染。
+ *
+ * 歌词单独存放（public/lyrics/<hash>.json），meta.json 里只留 lyricsUrl 指针：
+ * 歌词体积占了元数据的绝大部分，而列表页并不需要它，拆开后首屏只为列表字段买单，
+ * 歌词在播放到该曲目时才按需拉取。
  *
  * 用法：
  *   node scripts/gen-meta.mjs            # 只解析 meta.json 里缺失的条目
@@ -10,6 +14,7 @@
  *   node scripts/gen-meta.mjs --only 2   # 只解析第 3 条（下标从 0 开始）
  *
  * 增量下载：按 256KB 递增分块请求（不重复下载），一旦标题和封面都拿到就停。
+ * 升级自旧版本（歌词内嵌）时，首次运行会自动把已有歌词迁出，无需重新下载音频。
  */
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -21,6 +26,7 @@ const ROOT = path.resolve(import.meta.dirname, '..')
 const PLAYLIST = path.join(ROOT, 'public', 'playlist.json')
 const META_OUT = path.join(ROOT, 'public', 'meta.json')
 const COVER_DIR = path.join(ROOT, 'public', 'covers')
+const LYRICS_DIR = path.join(ROOT, 'public', 'lyrics')
 
 const CHUNK = 256 * 1024
 const MAX_BYTES = 8 * 1024 * 1024
@@ -48,9 +54,12 @@ function coverExt(format) {
   return (format || 'image/jpeg').split('/')[1]?.replace('jpeg', 'jpg') || 'jpg'
 }
 
+function shortHash(url) {
+  return createHash('sha1').update(url).digest('hex').slice(0, 12)
+}
+
 function coverName(url, format) {
-  const hash = createHash('sha1').update(url).digest('hex').slice(0, 12)
-  return `${hash}.${coverExt(format)}`
+  return `${shortHash(url)}.${coverExt(format)}`
 }
 
 /** 递增分块下载，边下边试解析，拿到所需内容即停 */
@@ -106,22 +115,55 @@ async function fetchAndParse(url) {
   })
 }
 
-function toCached(meta, coverRelPath) {
+/** 提取内嵌歌词（同步优先，退回纯文本） */
+function extractLyrics(meta) {
   const c = meta.common
-  let lyrics = []
-  let plainLyrics
-
+  let synced = []
   const texts = []
+
   for (const l of c.lyrics ?? []) {
     if (typeof l === 'string') texts.push(l)
     else if (Array.isArray(l.syncText) && l.syncText.length) {
-      lyrics = l.syncText
+      synced = l.syncText
         .filter((s) => s.timestamp !== undefined)
         .map((s) => ({ time: s.timestamp / 1000, text: s.text }))
         .sort((a, b) => a.time - b.time)
     } else if (l.text) texts.push(l.text)
   }
-  if (lyrics.length === 0 && texts.length > 0) plainLyrics = texts[0]
+
+  const plain = synced.length === 0 && texts.length > 0 ? texts[0] : null
+  return { synced, plain }
+}
+
+/**
+ * 歌词单独落盘：只有真的有歌词时才写文件。
+ * 拆出去是因为歌词占了 meta.json 的绝大部分体积，而列表页一个字都用不到，
+ * 没必要让首屏为一个 36KB 的文件买单。
+ */
+async function writeLyrics(url, synced, plain) {
+  const lines = Array.isArray(synced) ? synced : []
+  const text = typeof plain === 'string' && plain.length > 0 ? plain : null
+  if (lines.length === 0 && !text) return null
+  const name = `${shortHash(url)}.json`
+  await writeFile(path.join(LYRICS_DIR, name), JSON.stringify({ synced: lines, plain: text }))
+  return `/lyrics/${name}`
+}
+
+/** 把旧版 meta.json 里内嵌的歌词搬到独立文件（无需重新下载音频） */
+async function migrateLegacyLyrics(cache) {
+  let moved = 0
+  for (const [url, entry] of Object.entries(cache.tracks)) {
+    if (!('lyrics' in entry) && !('plainLyrics' in entry)) continue
+    entry.lyricsUrl = await writeLyrics(url, entry.lyrics, entry.plainLyrics)
+    delete entry.lyrics
+    delete entry.plainLyrics
+    moved++
+  }
+  return moved
+}
+
+function toCached(meta, coverRelPath, lyricsUrl) {
+  const c = meta.common
 
   return {
     title: c.title ?? '',
@@ -135,8 +177,7 @@ function toCached(meta, coverRelPath) {
     bitrate: meta.format.bitrate ? Math.round(meta.format.bitrate / 1000) : null,
     sampleRate: meta.format.sampleRate ?? null,
     cover: coverRelPath ?? null,
-    lyrics,
-    plainLyrics: plainLyrics ?? null,
+    lyricsUrl: lyricsUrl ?? null,
   }
 }
 
@@ -167,6 +208,15 @@ async function main() {
   }
 
   await mkdir(COVER_DIR, { recursive: true })
+  await mkdir(LYRICS_DIR, { recursive: true })
+
+  // 旧版 meta.json 把歌词内嵌在条目里，先搬到独立文件（不需要重新下载音频）
+  const moved = await migrateLegacyLyrics(cache)
+  if (moved > 0) {
+    console.log(`已把 ${moved} 条歌词迁出 meta.json → public/lyrics/`)
+    cache.generatedAt = new Date().toISOString()
+    await writeFile(META_OUT, JSON.stringify(cache, null, 2))
+  }
 
   let done = 0
   for (let i = 0; i < urls.length; i++) {
@@ -186,11 +236,14 @@ async function main() {
         await writeFile(path.join(COVER_DIR, name), pic.data)
         coverRelPath = `/covers/${name}`
       }
-      const entry = toCached(meta, coverRelPath)
+      const { synced, plain } = extractLyrics(meta)
+      const lyricsUrl = await writeLyrics(url, synced, plain)
+      const entry = toCached(meta, coverRelPath, lyricsUrl)
       cache.tracks[url] = entry
       done++
+      const lyricInfo = !lyricsUrl ? '无' : synced.length ? `${synced.length} 行` : '纯文本'
       console.log(
-        `  ✓ ${entry.title || '(无标题)'} — ${entry.artist || '?'} | 歌词 ${entry.lyrics.length} 行 | 封面 ${coverRelPath ? '有' : '无'}`,
+        `  ✓ ${entry.title || '(无标题)'} — ${entry.artist || '?'} | 歌词 ${lyricInfo} | 封面 ${coverRelPath ? '有' : '无'}`,
       )
       // 每成功一条就落盘，长任务中断不丢进度
       cache.generatedAt = new Date().toISOString()
@@ -202,7 +255,10 @@ async function main() {
 
   cache.generatedAt = new Date().toISOString()
   await writeFile(META_OUT, JSON.stringify(cache, null, 2))
-  console.log(`\n完成：新增/更新 ${done} 条，meta.json 共 ${Object.keys(cache.tracks).length} 条`)
+  const sizeKB = (await readFile(META_OUT)).length / 1024
+  console.log(
+    `\n完成：新增/更新 ${done} 条，meta.json 共 ${Object.keys(cache.tracks).length} 条（${sizeKB.toFixed(1)}KB，歌词另存 public/lyrics/）`,
+  )
   const missing = urls.filter((u) => !cache.tracks[u.trim()]?.title)
   if (missing.length) console.log(`未成功 ${missing.length} 条，重跑本脚本会重试`)
 }
