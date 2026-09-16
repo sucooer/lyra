@@ -23,13 +23,14 @@ jobs:
       # 决定脚本里「今天」是哪一天：这一步跑在北京 00:05，用 UTC 会算成昨天
       TZ: Asia/Shanghai
     steps:
-      - uses: actions/checkout@v4
+      # 都用 v7：v4 那代还跑在 Node 20 上，GitHub 已弃用该运行时并会打 annotation
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # 要 rebase，浅克隆下历史不全
 
       # gen-daily.mjs 直接 import 了 src/lib/daily.ts（与前端共用同一份选歌规则），
       # Node 的类型擦除要 ≥22.18 才默认开启，所以这里不能降版本
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
