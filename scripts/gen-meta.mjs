@@ -12,6 +12,10 @@
  * 同专辑多首曲子内嵌同一张封面时只落一个文件，且换歌单/换直链不会重存。
  * 每次运行结束会清掉 covers/ 与 lyrics/ 里不再被 meta.json 引用的文件。
  *
+ * 封面长边压到 MAX_COVER_EDGE 以内（原图动辄 2048px / 800KB，界面里最多显示到约 300px）。
+ * 这一步用 ffmpeg，属可选优化：本机没装就按原图落盘，其余流程不受影响。
+ * 自定义 ffmpeg 位置：环境变量 FFMPEG_PATH。
+ *
  * 用法：
  *   node scripts/gen-meta.mjs            # 只解析 meta.json 里缺失的条目
  *   node scripts/gen-meta.mjs --force    # 全部重新解析
@@ -20,9 +24,11 @@
  * 增量下载：按 256KB 递增分块请求（不重复下载），一旦标题和封面都拿到就停。
  * 升级自旧版本（歌词内嵌）时，首次运行会自动把已有歌词迁出，无需重新下载音频。
  */
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { parseBlob } from 'music-metadata'
 
@@ -34,6 +40,11 @@ const LYRICS_DIR = path.join(ROOT, 'public', 'lyrics')
 
 const CHUNK = 256 * 1024
 const MAX_BYTES = 8 * 1024 * 1024
+
+/** 封面长边上限：界面里最大只显示到约 300px，2 倍屏 600px 足够；原图动辄 2048px / 800KB */
+const MAX_COVER_EDGE = 800
+/** JPEG 质量（ffmpeg -q:v，2 最好 / 31 最差；4 视觉上与原图无差） */
+const COVER_QUALITY = '4'
 
 const args = process.argv.slice(2)
 const force = args.includes('--force')
@@ -69,6 +80,88 @@ function shortHash(input) {
  */
 function coverName(data, format) {
   return `${shortHash(data)}.${coverExt(format)}`
+}
+
+/**
+ * ffmpeg 只用来压封面，属可选优化：找不到就按原图落盘，构建照常，不做任何提示以外的动作。
+ * 有特殊安装位置时用环境变量 FFMPEG_PATH 指过去。
+ */
+const ffmpegBin = [process.env.FFMPEG_PATH, 'ffmpeg']
+  .filter(Boolean)
+  .find((bin) => {
+    const r = spawnSync(bin, ['-version'], { stdio: 'ignore' })
+    return !r.error && r.status === 0
+  }) ?? null
+
+/**
+ * 只从文件头读图片尺寸（封面基本只有 JPEG / PNG 两种）。
+ * 自己解析是为了判断「到底要不要压」——否则只能无脑重编码，
+ * 把本来就很小的图也再走一遍有损转换。
+ */
+function imageSize(buf, ext) {
+  if (ext === 'png') {
+    // \x89PNG\r\n\x1a\n | 长度(4) | 'IHDR' | 宽(4) | 高(4)
+    if (buf.length > 24 && buf.toString('latin1', 12, 16) === 'IHDR') {
+      return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
+    }
+    return null
+  }
+  if (ext === 'jpg' || ext === 'jpeg') {
+    // 逐个跳过段头，直到 SOFn：段内是 精度(1) 高(2) 宽(2)
+    let i = 2
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xff) {
+        i++
+        continue
+      }
+      const marker = buf[i + 1]
+      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) {
+        i += 2
+        continue
+      }
+      const isSof =
+        marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc
+      if (isSof) return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) }
+      i += 2 + buf.readUInt16BE(i + 2)
+    }
+  }
+  return null
+}
+
+/**
+ * 长边超过 MAX_COVER_EDGE 就等比压到上限以内，返回编码后的字节。
+ * 认不出尺寸、本来就不大、没装 ffmpeg 或压完反而更大 —— 一律原样返回。
+ */
+async function shrinkCover(data, ext) {
+  if (!ffmpegBin) return data
+  const size = imageSize(data, ext)
+  if (!size || Math.max(size.w, size.h) <= MAX_COVER_EDGE) return data
+
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'lyra-cover-'))
+  const src = path.join(dir, `in.${ext}`)
+  const dst = path.join(dir, `out.${ext}`)
+  try {
+    await writeFile(src, data)
+    const quality = ext === 'jpg' || ext === 'jpeg' ? ['-q:v', COVER_QUALITY] : []
+    const r = spawnSync(
+      ffmpegBin,
+      [
+        '-v', 'error', '-y', '-i', src,
+        '-vf', `scale=min(${MAX_COVER_EDGE}\\,iw):min(${MAX_COVER_EDGE}\\,ih):force_original_aspect_ratio=decrease`,
+        ...quality, '-frames:v', '1', dst,
+      ],
+      { stdio: ['ignore', 'ignore', 'pipe'] },
+    )
+    if (r.status !== 0) {
+      const why = r.stderr?.toString().trim().split('\n').pop() || r.error?.message || `exit ${r.status}`
+      console.warn(`  ! 封面压缩失败，改用原图（${why}）`)
+      return data
+    }
+    const out = await readFile(dst)
+    return out.length < data.length ? out : data
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }
 
 /** 递增分块下载，边下边试解析，拿到所需内容即停 */
@@ -172,24 +265,27 @@ async function migrateLegacyLyrics(cache) {
 }
 
 /**
- * 旧版封面文件名是 sha1(曲目直链)，迁到「内容哈希」命名。
- * 直接读本地已落盘的图片重新命名，不需要重新下载音频；内容相同的会指向同一个文件。
+ * 把已有的封面迁到「内容哈希」命名，超出长边上限的就地压小。
+ * 读本地已落盘的图片重编码，不需要重新下载音频；内容相同的会收敛到同一个文件。
  */
-async function migrateCoverNames(cache) {
-  let migrated = 0
+async function migrateCovers(cache) {
+  let renamed = 0
+  let shrunk = 0
   for (const entry of Object.values(cache.tracks)) {
     if (!entry.cover) continue
     const oldName = path.basename(entry.cover)
-    const oldPath = path.join(COVER_DIR, oldName)
-    if (!existsSync(oldPath)) continue
-    const data = await readFile(oldPath)
-    const newName = `${shortHash(data)}.${oldName.split('.').pop()}`
+    const data = await readFile(path.join(COVER_DIR, oldName)).catch(() => null)
+    if (!data) continue
+    const ext = oldName.split('.').pop()
+    const out = await shrinkCover(data, ext)
+    if (out !== data) shrunk++
+    const newName = `${shortHash(out)}.${ext}`
     if (newName === oldName) continue
-    await writeIfChanged(path.join(COVER_DIR, newName), data)
+    await writeIfChanged(path.join(COVER_DIR, newName), out)
     entry.cover = `/covers/${newName}`
-    migrated++
+    renamed++
   }
-  return migrated
+  return { renamed, shrunk }
 }
 
 /** 只在内容不同时才写盘，避免同一张封面被重复覆盖 */
@@ -294,11 +390,14 @@ async function main() {
   const movedLyrics = await migrateLegacyLyrics(cache)
   if (movedLyrics > 0) console.log(`已把 ${movedLyrics} 条歌词迁出 meta.json → public/lyrics/`)
 
-  // 封面从「按直链命名」迁到「按内容命名」，顺便合并重复的那些
-  const movedCovers = await migrateCoverNames(cache)
-  if (movedCovers > 0) console.log(`已把 ${movedCovers} 张封面转为按内容命名 → public/covers/`)
+  // 封面统一成「按内容哈希命名」，超出长边上限的顺带压小
+  const coverMoves = await migrateCovers(cache)
+  if (coverMoves.renamed > 0) {
+    const how = coverMoves.shrunk > 0 ? `按内容命名 + 压到 ${MAX_COVER_EDGE}px 内` : '按内容命名'
+    console.log(`已重整 ${coverMoves.renamed} 张封面（${how}） → public/covers/`)
+  }
 
-  if (movedLyrics > 0 || movedCovers > 0) {
+  if (movedLyrics > 0 || coverMoves.renamed > 0) {
     cache.generatedAt = new Date().toISOString()
     await writeFile(META_OUT, JSON.stringify(cache, null, 2))
   }
@@ -317,8 +416,9 @@ async function main() {
       let coverRelPath = null
       const pic = meta.common.picture?.[0]
       if (pic) {
-        const name = coverName(url, pic.format)
-        await writeFile(path.join(COVER_DIR, name), pic.data)
+        const data = await shrinkCover(Buffer.from(pic.data), coverExt(pic.format))
+        const name = coverName(data, pic.format)
+        await writeIfChanged(path.join(COVER_DIR, name), data)
         coverRelPath = `/covers/${name}`
       }
       const { synced, plain } = extractLyrics(meta)
@@ -345,8 +445,10 @@ async function main() {
   if (Object.keys(cache.tracks).length > 0) {
     const orphans = await sweepOrphans(cache)
     if (orphans > 0) console.log(`已清理 ${orphans} 个不再被引用的封面/歌词文件`)
-    const covers = (await readdir(COVER_DIR)).length
-    console.log(`封面：${covers} 个文件（按内容去重后）`)
+    const files = await readdir(COVER_DIR)
+    const bytes = (await Promise.all(files.map(async (f) => (await readFile(path.join(COVER_DIR, f))).length)))
+      .reduce((a, b) => a + b, 0)
+    console.log(`封面：${files.length} 个文件，共 ${(bytes / 1024).toFixed(0)}KB（按内容去重${ffmpegBin ? ` + 压到 ${MAX_COVER_EDGE}px 内` : '，未压缩：没找到 ffmpeg'}）`)
   }
 
   const sizeKB = (await readFile(META_OUT)).length / 1024
