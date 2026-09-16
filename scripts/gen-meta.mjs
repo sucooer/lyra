@@ -392,8 +392,10 @@ function toUrls(raw) {
 
 async function main() {
   let urls
+  let rawList = []
   try {
-    urls = toUrls(JSON.parse(await readFile(PLAYLIST, 'utf8')))
+    rawList = JSON.parse(await readFile(PLAYLIST, 'utf8'))
+    urls = toUrls(rawList)
   } catch (e) {
     // 读不了歌单不能挡构建（部署平台跑 build 时尤其如此），警告后跳过
     console.warn('[gen-meta] 读取 playlist.json 失败，跳过预生成：', e?.message ?? e)
@@ -488,6 +490,12 @@ async function main() {
   )
   const missing = urls.filter((u) => !cache.tracks[u.trim()]?.title)
   if (missing.length) console.log(`未成功 ${missing.length} 条，重跑本脚本会重试`)
+
+  // 源文件里还写着裸链接的话，元数据已经解析好了，提醒一句就能顺手回填
+  const bare = Array.isArray(rawList) ? rawList.filter((x) => typeof x === 'string').length : 0
+  if (bare > 0) {
+    console.log(`playlist.json 里还有 ${bare} 条裸链接：跑 pnpm label 把歌名写回去，源文件就能自己认出歌了`)
+  }
 }
 
 main().catch((e) => {

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "node scripts/gen-meta.mjs && vite build",
     "preview": "vite preview",
-    "meta": "node scripts/gen-meta.mjs"
+    "meta": "node scripts/gen-meta.mjs",
+    "label": "node scripts/label-playlist.mjs"
   },
   "dependencies": {
     "music-metadata": "^11.15.0",

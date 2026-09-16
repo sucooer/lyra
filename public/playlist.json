@@ -1,11 +1,10 @@
 [
-  "https://img.520717.xyz/file/1789471325044_02._%E7%B2%89%E9%9B%AA.flac",
-  "https://img.520717.xyz/file/Pks0olqo.flac",
-  "https://img.520717.xyz/file/fTdG41C8.flac",
-  "https://img.520717.xyz/file/7xlgUN0m.flac",
-  "https://img.520717.xyz/file/LTSdK3XY.flac",
-  "https://img.520717.xyz/file/vTUV6QZy.flac",
-  "https://img.520717.xyz/file/PyLOCtdn.flac",
-  "https://img.520717.xyz/file/cMIiX9dg.flac",
-  "https://img.520717.xyz/file/IUiFyfnn.flac"
+  { "url": "https://img.520717.xyz/file/1789471325044_02._%E7%B2%89%E9%9B%AA.flac", "title": "粉雪", "artist": "高木さん(CV:高橋李依)" },
+  { "url": "https://img.520717.xyz/file/Pks0olqo.flac", "title": "知足", "artist": "五月天" },
+  { "url": "https://img.520717.xyz/file/fTdG41C8.flac", "title": "恋爱ing", "artist": "五月天" },
+  { "url": "https://img.520717.xyz/file/7xlgUN0m.flac", "title": "Only Time", "artist": "Enya" },
+  { "url": "https://img.520717.xyz/file/LTSdK3XY.flac", "title": "May It Be", "artist": "Enya" },
+  { "url": "https://img.520717.xyz/file/PyLOCtdn.flac", "title": "はちゃめちゃわちゃライフ！", "artist": "FRUITS ZIPPER" },
+  { "url": "https://img.520717.xyz/file/cMIiX9dg.flac", "title": "The Day You Went Away", "artist": "M2M" },
+  { "url": "https://img.520717.xyz/file/IUiFyfnn.flac", "title": "Pretty Boy", "artist": "M2M" }
 ]
