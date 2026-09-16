@@ -27,17 +27,24 @@ function onDragMove(e: PointerEvent) {
 }
 function onDragUp(e: PointerEvent) {
   if (dragRatio.value === null) return
-  player.seek(ratioFrom(e) * player.duration)
-  dragRatio.value = null
+  const r = ratioFrom(e)
+  dragRatio.value = null // 先清拖动态，再 seek，避免进度条闪回
+  player.seek(r * player.duration)
 }
 function onDragCancel() {
   dragRatio.value = null
 }
 
+/** 滑轨显示比例（0-100）：拖动时跟手，否则跟播放进度 */
+const shownPercent = computed(() =>
+  dragRatio.value !== null ? dragRatio.value * 100 : progress.value,
+)
+
 /** 拖动/点击时用于显示的时间 */
 const shownCurrent = computed(() =>
   dragRatio.value !== null ? dragRatio.value * player.duration : player.currentTime,
 )
+const shownRemain = computed(() => Math.max(0, player.duration - shownCurrent.value))
 
 function fmt(sec: number): string {
   if (!sec || !isFinite(sec)) return '0:00'
@@ -45,147 +52,140 @@ function fmt(sec: number): string {
   const s = Math.floor(sec % 60)
   return `${m}:${String(s).padStart(2, '0')}`
 }
-
-function onSeek(e: MouseEvent) {
-  const el = e.currentTarget as HTMLElement
-  const r = el.getBoundingClientRect()
-  const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-  player.seek(ratio * player.duration)
-}
 </script>
 
 <template>
-  <!-- 浮起的圆角胶囊（Apple Music 新版迷你播放条），无歌曲时也保留位置 -->
+  <!-- 浮起的圆角卡片（对齐 Apple Music 迷你播放条），无歌曲时也保留位置 -->
   <div class="relative z-30 px-2 pt-1 pb-2 sm:px-3 sm:pb-3">
-    <div class="relative rounded-2xl border border-line bg-bar backdrop-blur-xl overflow-hidden">
-      <!-- ===== 有歌曲：完整控制条 ===== -->
-      <template v-if="player.currentTrack">
-        <!-- 桌面端：胶囊顶部细进度条（hover 加深） -->
-        <div
-          class="hidden md:block absolute top-0 left-3 right-3 h-[6px] cursor-pointer group z-10"
-          @click="onSeek"
-        >
-          <div class="h-[3px] mt-[3px] bg-track group-hover:h-[5px] group-hover:mt-[1px] transition-all rounded-full">
-            <div class="h-full bg-fg group-hover:bg-music transition-colors rounded-full" :style="{ width: progress + '%' }"></div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 h-14 sm:h-16">
-          <!-- 封面 + 信息（点击展开全屏；移动端占满剩余宽度） -->
-          <button
-        class="flex items-center gap-3 min-w-0 flex-1 md:flex-none md:w-64 text-left"
-        @click="player.showNowPlaying = true"
-      >
-        <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-fill shrink-0 shadow-lg">
-          <img
-            v-if="player.currentTrack.meta?.coverUrl"
-            :src="player.currentTrack.meta.coverUrl"
-            class="w-full h-full object-cover"
-          />
-          <div v-else class="w-full h-full flex items-center justify-center text-fg-subtle">♪</div>
-        </div>
-        <div class="min-w-0">
-          <div class="text-sm font-medium truncate">{{ player.displayTitle }}</div>
-          <div class="text-xs text-fg-muted truncate">{{ player.displayArtist }}</div>
-        </div>
-      </button>
-
-      <!-- 控制区：移动端只留 prev/play/next，桌面端全量 -->
-      <div class="flex items-center justify-end sm:justify-center gap-3 sm:gap-6 shrink-0">
-        <button
-          class="hidden sm:flex transition shrink-0"
-          :class="player.shuffle ? 'text-music' : 'text-fg-muted hover:text-fg'"
-          @click="player.shuffle = !player.shuffle"
-          title="随机播放"
-        >
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
-        </button>
-        <button class="text-fg hover:opacity-70 transition shrink-0" @click="player.prev" title="上一首">
-          <svg viewBox="0 0 24 24" class="w-6 h-6 sm:w-6 sm:h-6 fill-current"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
-        </button>
-        <button
-          class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-solid text-on-solid flex items-center justify-center hover:scale-105 transition shrink-0"
-          @click="player.togglePlay"
-        >
-          <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5"><path d="M8 5v14l11-7z"/></svg>
-          <svg v-else viewBox="0 0 24 24" class="w-4 h-4 sm:w-5 sm:h-5 fill-current"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-        </button>
-        <button class="text-fg hover:opacity-70 transition shrink-0" @click="player.next()" title="下一首">
-          <svg viewBox="0 0 24 24" class="w-6 h-6 sm:w-6 sm:h-6 fill-current"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
-        </button>
-        <button
-          class="hidden sm:flex transition shrink-0"
-          :class="player.repeat !== 'off' ? 'text-music' : 'text-fg-muted hover:text-fg'"
-          @click="player.cycleRepeat"
-          title="循环"
-        >
-          <svg v-if="player.repeat !== 'one'" viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-          <svg v-else viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>
-        </button>
-      </div>
-
-      <!-- 时间 + 音量（仅桌面） -->
-      <div class="hidden sm:flex w-52 lg:w-64 items-center justify-end gap-2 lg:gap-3 text-xs text-fg-muted tabular-nums shrink-0">
-        <span>{{ fmt(player.currentTime) }}</span>
-        <span class="hidden lg:inline">/</span>
-        <span class="hidden lg:inline">{{ fmt(player.duration) }}</span>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          :value="player.volume"
-          class="hidden lg:block w-20 accent-music"
-          @input="player.setVolume(parseFloat(($event.target as HTMLInputElement).value))"
-        />
-      </div>
-    </div>
-
-    <!-- 移动端：底部常驻进度条（pointer 事件统一处理点击和拖动，松手才 seek） -->
     <div
-      class="md:hidden px-3 pt-2 pb-2 touch-none select-none"
-      @pointerdown="onDragDown"
-      @pointermove="onDragMove"
-      @pointerup="onDragUp"
-      @pointercancel="onDragCancel"
+      class="relative rounded-[26px] bg-bar backdrop-blur-xl overflow-hidden shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
     >
-      <!-- 滑轨行：容器高度 = 滑块高度，滑块完整落在行内不外溢 -->
-      <div class="relative h-3.5 flex items-center cursor-pointer">
-        <div class="absolute inset-x-0 h-1 bg-track rounded-full">
-          <div
-            class="absolute left-0 top-0 h-full bg-fg rounded-full"
-            :style="{ width: (dragRatio ?? progress) + '%' }"
+      <!-- ===================== 有歌曲 ===================== -->
+      <template v-if="player.currentTrack">
+        <!-- 第一行：封面 / 曲目信息 / 官方双键控制 -->
+        <div class="flex items-center gap-3 pl-3 pr-4 sm:pl-4 sm:pr-6 pt-3 sm:pt-3.5">
+          <button
+            class="flex items-center gap-3.5 min-w-0 flex-1 text-left"
+            @click="player.showNowPlaying = true"
           >
-            <span
-              class="absolute -right-1.5 -top-1 w-3 h-3 rounded-full bg-fg shadow transition-transform"
-              :class="dragRatio !== null ? 'scale-125' : ''"
-            ></span>
+            <div
+              class="w-13 h-13 sm:w-14 sm:h-14 rounded-[14px] overflow-hidden bg-fill shrink-0"
+            >
+              <img
+                v-if="player.currentTrack.meta?.coverUrl"
+                :src="player.currentTrack.meta.coverUrl"
+                class="w-full h-full object-cover"
+              />
+              <div v-else class="w-full h-full flex items-center justify-center text-fg-subtle">♪</div>
+            </div>
+            <div class="min-w-0">
+              <div class="text-[17px] font-semibold truncate leading-tight">
+                {{ player.displayTitle }}
+              </div>
+              <div class="text-[15px] text-fg-muted truncate mt-0.5">
+                {{ player.displayArtist }}
+              </div>
+            </div>
+          </button>
+
+          <!-- 控制键：官方迷你播放条只有 ▶ / ⏸ 与 ▶▶ 两个纯色按钮 -->
+          <div class="flex items-center gap-7 sm:gap-8 shrink-0">
+            <!-- 随机 / 循环：官方桌面端播放条才有的附加键，窄屏隐藏保持官方迷你条外观 -->
+            <button
+              class="hidden xl:flex transition"
+              :class="player.shuffle ? 'text-music' : 'text-fg-muted hover:text-fg'"
+              @click="player.shuffle = !player.shuffle"
+              title="随机播放"
+            >
+              <svg viewBox="0 0 24 24" class="w-[18px] h-[18px] fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+            </button>
+
+            <!-- ▶ / ⏸ 播放暂停：纯色三角，无圆形底 -->
+            <button
+              class="text-fg hover:opacity-60 active:opacity-40 transition"
+              @click="player.togglePlay"
+              :title="player.playing ? '暂停' : '播放'"
+            >
+              <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current">
+                <path d="M6 4.5v15L19 12z" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current">
+                <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" />
+              </svg>
+            </button>
+
+            <!-- ▶▶ 下一首：双三角 -->
+            <button
+              class="text-fg hover:opacity-60 active:opacity-40 transition"
+              @click="player.next()"
+              title="下一首"
+            >
+              <svg viewBox="0 0 24 24" class="w-8 h-8 sm:w-9 sm:h-9 fill-current">
+                <path d="M2.5 5v14L12 12zM11 5v14l9.5-7z" />
+              </svg>
+            </button>
+
+            <button
+              class="hidden xl:flex transition"
+              :class="player.repeat !== 'off' ? 'text-music' : 'text-fg-muted hover:text-fg'"
+              @click="player.cycleRepeat"
+              :title="player.repeat === 'one' ? '单曲循环' : player.repeat === 'all' ? '列表循环' : '循环关闭'"
+            >
+              <svg v-if="player.repeat !== 'one'" viewBox="0 0 24 24" class="w-[18px] h-[18px] fill-current"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+              <svg v-else viewBox="0 0 24 24" class="w-[18px] h-[18px] fill-current"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>
+            </button>
           </div>
         </div>
-      </div>
-      <!-- 时间行：与滑轨间隔 6px，滑块碰不到 -->
-      <div class="flex justify-between mt-1.5 text-[10px] text-fg-subtle tabular-nums">
-        <span>{{ fmt(shownCurrent) }}</span>
-        <span>-{{ fmt(Math.max(0, player.duration - shownCurrent)) }}</span>
-      </div>
-      </div>
+
+        <!-- 第二行：进度滑轨（粗轨道 + 大圆点滑块） -->
+        <div class="px-3 sm:px-4 pt-2.5 sm:pt-3 pb-2.5 sm:pb-3">
+          <div
+            class="relative h-4 flex items-center cursor-pointer touch-none select-none"
+            @pointerdown="onDragDown"
+            @pointermove="onDragMove"
+            @pointerup="onDragUp"
+            @pointercancel="onDragCancel"
+          >
+            <!-- 轨道 -->
+            <div class="absolute inset-x-0 h-[5px] rounded-full bg-track">
+              <!-- 已播放部分 -->
+              <div
+                class="relative h-full rounded-full bg-fg"
+                :style="{ width: shownPercent + '%' }"
+              >
+                <!-- 大号圆形滑块：中心落在播放进度上，可拖拽 -->
+                <span
+                  class="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-4 rounded-full bg-fg shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-transform"
+                  :class="dragRatio !== null ? 'scale-125' : ''"
+                ></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 第三行：已播放时间 / 剩余时间 -->
+          <div class="flex justify-between mt-1.5 text-[11px] text-fg-subtle tabular-nums">
+            <span>{{ fmt(shownCurrent) }}</span>
+            <span>-{{ fmt(shownRemain) }}</span>
+          </div>
+        </div>
       </template>
 
-      <!-- ===== 无歌曲：Apple Music 式空播放条（封面占位 + 灰掉的控制键） ===== -->
-      <div v-else class="flex items-center justify-between pl-3 pr-5 h-14 sm:h-16">
+      <!-- ===================== 无歌曲：官方空播放条 ===================== -->
+      <div v-else class="flex items-center gap-3 pl-3 pr-4 sm:pl-4 sm:pr-6 py-3 sm:py-3.5">
         <div
-          class="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-fill flex items-center justify-center text-fg-subtle shrink-0"
+          class="w-13 h-13 sm:w-14 sm:h-14 rounded-[14px] bg-fill flex items-center justify-center text-fg-subtle shrink-0"
         >
-          <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current">
+          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current">
             <path d="M12 3v11.3A3.7 3.7 0 1 0 14 17.7V7h5V3h-7z" />
           </svg>
         </div>
-        <div class="flex items-center gap-6 text-fg-subtle/70" aria-hidden="true">
-          <svg viewBox="0 0 24 24" class="w-8 h-8 fill-current">
-            <path d="M8 5v14l11-7z" />
+        <!-- 官方空态同为 ▶ 与 ▶▶ 两个纯色双键 -->
+        <div class="flex items-center gap-7 sm:gap-8 text-fg ml-auto" aria-hidden="true">
+          <svg viewBox="0 0 24 24" class="w-7 h-7 sm:w-8 sm:h-8 fill-current">
+            <path d="M6 4.5v15L19 12z" />
           </svg>
-          <svg viewBox="0 0 24 24" class="w-8 h-8 fill-current">
-            <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
+          <svg viewBox="0 0 24 24" class="w-8 h-8 sm:w-9 sm:h-9 fill-current">
+            <path d="M2.5 5v14L12 12zM11 5v14l9.5-7z" />
           </svg>
         </div>
       </div>

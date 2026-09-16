@@ -39,7 +39,8 @@
   --app-fill: rgba(0, 0, 0, 0.05);
   --app-fill-strong: rgba(0, 0, 0, 0.09);
   --app-line: rgba(0, 0, 0, 0.1);
-  --app-bar: rgba(255, 255, 255, 0.82);
+  /* 播放条：对齐 Apple Music 迷你播放条的灰色材质（在浅色页面上混出 ~#e9e9e9） */
+  --app-bar: rgba(120, 120, 128, 0.16);
   --app-track: rgba(0, 0, 0, 0.12);
   --app-scrim: rgba(255, 255, 255, 0.7);
   --app-solid: #000000;
@@ -63,7 +64,7 @@
     --app-fill: rgba(255, 255, 255, 0.08);
     --app-fill-strong: rgba(255, 255, 255, 0.14);
     --app-line: rgba(255, 255, 255, 0.1);
-    --app-bar: rgba(9, 9, 11, 0.8);
+    --app-bar: rgba(50, 50, 52, 0.72);
     --app-track: rgba(255, 255, 255, 0.18);
     --app-scrim: rgba(0, 0, 0, 0.5);
     --app-solid: #ffffff;
@@ -87,7 +88,7 @@
   --app-fill: rgba(255, 255, 255, 0.08);
   --app-fill-strong: rgba(255, 255, 255, 0.14);
   --app-line: rgba(255, 255, 255, 0.1);
-  --app-bar: rgba(9, 9, 11, 0.8);
+  --app-bar: rgba(50, 50, 52, 0.72);
   --app-track: rgba(255, 255, 255, 0.18);
   --app-scrim: rgba(0, 0, 0, 0.5);
   --app-solid: #ffffff;
