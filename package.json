@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/gen-meta.mjs && vite build",
+    "build": "node scripts/gen-meta.mjs && node scripts/gen-emby.mjs && vite build",
     "preview": "vite preview",
     "meta": "node scripts/gen-meta.mjs",
+    "emby": "node scripts/gen-emby.mjs",
     "daily": "node scripts/gen-daily.mjs",
     "label": "node scripts/label-playlist.mjs"
   },

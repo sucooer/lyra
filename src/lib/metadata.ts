@@ -253,6 +253,10 @@ export async function parseTrackMeta(url: string, filename = ''): Promise<Parsed
 /** 尝试拉取同路径 .lrc 外部歌词 */
 export async function fetchSidecarLrc(audioUrl: string): Promise<LyricLine[]> {
   const lrcUrl = audioUrl.replace(/\.[a-z0-9]+(\?.*)?$/i, '.lrc$1')
+  // 直链里不带文件扩展名时（例如走 /api/emby/stream?id=xxx 的曲目），
+  // 上面的替换不会命中，lrcUrl 就等于音频地址本身——照原样请求会把整首曲子
+  // 当文本读下来（实测这类曲目单首 20~30MB）。这类链没有外挂歌词，直接放弃。
+  if (lrcUrl === audioUrl) return []
   try {
     let resp = await fetch(lrcUrl)
     if (!resp.ok) {

@@ -6,6 +6,12 @@ dist/
 .wrangler/
 .workbuddy/
 
+# Emby 的地址与 API 密钥。密钥等于整台服务器的完整权限（不只音乐库），
+# 绝不能进仓库，也绝不能出现在前端会拿到的文件里（playlist.json / meta.json 都不行）。
+.env
+.env.*
+!.env.example
+
 # 以下三项由 scripts/gen-meta.mjs 生成，但**是有意入库的**（2026-09-16 决定）：
 # 脚本把 meta.json 本身当作解析缓存，入库后 CI 构建可命中增量缓存、跳过对全部远程音频的
 # 下载与解析；否则每次构建都要从零跑一遍整个曲库，随曲库增大只会越来越慢。

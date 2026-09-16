@@ -9,6 +9,7 @@
 - 📻 **电台**：一键把资料库全部歌曲乱序无限播放；封面每次点播程序化随机生成
 - 💽 **歌单卡片**：`public/playlists.json` 自定义歌单（按歌手/专辑/曲名筛选），首页推荐区卡片式展示，封面自动取成员专辑封面拼贴
 - 🌅 **每日推荐**：按日期从曲库轮换出一份当天歌单，排在推荐区第一位；由 GitHub Actions 每天定时生成（cron），不跑也不会空着
+- 🎛️ **Emby 音乐库**：`pnpm emby` 直接把一台 Emby 服务器上的音乐库同步进曲库（907 首约 4 秒），元数据与封面取自 Emby；播放经本站端点中转，密钥不出服务端
 - 🏷️ **元数据解析**：浏览器端用 `music-metadata` v11 解析内嵌封面、标题、歌手、专辑、歌词（ID3v2 / Vorbis Comment / MP4 atom）
 - ⚡ **预解析缓存**：构建时生成 `public/meta.json` + `public/covers/` + `public/lyrics/`，首页直接渲染、不再联网解析。这三项产物**随仓库提交**——`meta.json` 本身就是解析缓存，入库后部署构建能直接命中，不必每次重新下载解析整个曲库
 - ⚡ **Range 分块**：未预解析的条目在浏览器端按需解析，只下载文件头部（默认 2MB），40MB FLAC 秒开信息
@@ -165,6 +166,50 @@ pnpm daily --dry                # 只打印不写文件
 改文案或换歌单 id 在 `lib/daily.ts` 顶部（`DAILY_ID` / `DAILY_TITLE`）；
 `playlists.json` 里手写同 id 的定义会被每天生成的这份覆盖。
 
+## 接入 Emby 音乐库
+
+除了 `public/playlist.json` 里逐首手写的直链，曲库也可以直接同步一台 **Emby** 服务器：
+`pnpm emby` 把整个音乐库生成为 `public/emby.json`，页面加载时并进同一个曲库 ——
+于是它们自动出现在电台、每日推荐和 `playlists.json` 的歌单规则里。
+
+**为什么不用解析**：Emby 已经把库索引好了，一次 `Items` 查询就带回标题 / 艺术家 /
+专辑 / 年份 / 轨号 / 时长 / 码率 / 采样率，封面也有现成接口。实测 907 首 **4.3 秒**
+完成；同规模若走 `pnpm meta` 的「下载音频分块解析」，要跑约半小时、并经 Emby
+再拉 1.8GB 流量。代价是**拿不到歌词** —— 实测库里所有曲目内嵌歌词都是 0 条，
+Emby 也没有可用的歌词端点。纯音乐库不受影响。
+
+```bash
+cp .env.example .env.local   # 填 EMBY_URL 与 EMBY_API_KEY
+pnpm emby                    # 生成 public/emby.json 与封面
+pnpm emby --dry              # 只打印不落盘
+pnpm emby --limit 30         # 试跑
+```
+
+密钥在 Emby 后台 → 设置 → 高级 → API 密钥 新建。⚠️ 它**不是只读音乐库的凭证，
+而是整台服务器的完整权限**（含其它媒体库与管理接口），因此只能待在服务端：
+本地放 `.env.local`（`.gitignore` 已排除），线上放 CF Pages / Vercel 的环境变量。
+没配也能正常构建 —— 脚本会跳过，直接用仓库里已提交的快照。
+
+### 播放为什么要中转
+
+Emby 取流必须带 `api_key`，而站点是 https、Emby 通常只有 http。两者叠加使得
+**前端不可能直连**：密钥写进 `emby.json` 等于公开给所有访问者，而 http 媒体在
+https 页面里会被混合内容策略拦掉。
+
+所以 `emby.json` 里存的不是音频地址，而是本站端点 `/api/emby/stream?id=<条目 id>`，
+密钥由服务端注入（`functions/api/emby/stream.js` / `api/emby/stream.js`，两份逻辑等价）。
+`pnpm dev` 下由 `vite.config.ts` 的中间件复用同一个处理器，不另写一套 ——
+免得开发期和生产期恰好在「密钥怎么注入」这件事上漂移。
+
+### 产物
+
+`public/emby.json`（约 245KB / 907 首）+ `public/emby-covers/`（约 4.5MB / 58 张），
+**两者都要入库**：构建环境通常没有密钥，靠的就是仓库里这份快照。
+
+封面按专辑去重，文件名取图片内容的 sha1 前 12 位（与 `covers/` 同一套约定），
+刻意放在**单独目录** —— `gen-meta` 会清理 `public/covers/` 里未被 `meta.json`
+引用的文件，放进去会被当孤儿删掉。
+
 ## 部署
 
 ### Cloudflare Pages
@@ -176,11 +221,14 @@ npm run build # 产物在 dist/
 
 Pages 控制台连接仓库：构建命令 `npm run build`，输出目录 `dist`。CORS 代理由 `functions/api/proxy.js` 自动生效。
 
+若要让构建时顺带同步 Emby（可选），在 Pages 的 Settings → Environment variables 里加
+`EMBY_URL` 与 `EMBY_API_KEY`；不加则用仓库里已提交的 `public/emby.json` 快照，构建照常。
+
 或 CLI 直接部署：`npx wrangler pages deploy dist --project-name=apple-music-player`
 
 ### Vercel
 
-连接仓库即可，`vercel.json` 已配置（构建 `npm run build`，输出 `dist`，`/api/proxy` 走 `api/proxy.js` serverless 函数）。
+连接仓库即可，`vercel.json` 已配置（构建 `npm run build`，输出 `dist`，`/api/proxy` 走 `api/proxy.js` serverless 函数）。Emby 取流走 `api/emby/stream.js`，同样按需配置上面两个环境变量。
 
 ## ⚠️ 音乐源要求
 
@@ -190,13 +238,20 @@ Pages 控制台连接仓库：构建命令 `npm run build`，输出目录 `dist`
    - Security → WAF → Custom rules → `(http.host eq "img.example.com" and starts_with(http.request.uri.path, "/file/"))` → Skip: **All remaining custom rules / Security features**
 4. **Range 支持**：元数据解析需要服务端支持 `Range` 请求（响应 `Accept-Ranges: bytes`）；不支持时会退回全量下载解析
 
+以上是针对 `playlist.json` 里手写直链的。**Emby 来源的曲目不受第 1、2 条约束**：
+http 源和缺失的 CORS 头都由 `/api/emby/stream` 在服务端抹平（见「接入 Emby 音乐库」）。
+
 ## 本地开发
 
 ```bash
 npm install
-npm run dev        # vite dev server（/api/proxy 在 dev 下不可用）
+cp .env.example .env.local   # 要用 Emby 才需要填
+npm run dev        # vite dev server；/api/proxy 与 /api/emby/stream 由 vite.config.ts 的中间件复用生产处理器
 npx wrangler pages dev dist  # 构建后用 wrangler 模拟 Pages（含 functions）
 ```
+
+`npm run dev` 下 `/api/*` 走的是 `vite.config.ts` 里那段中间件，它加载的正是
+Cloudflare 那份函数实现 —— 所以开发期就能验到密钥注入与 Range 透传，不必先部署。
 
 ## 技术栈
 

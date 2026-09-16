@@ -25,6 +25,7 @@ import {
   type PlaylistEntry,
 } from '../lib/playlist'
 import { buildDaily, dateKey, parseDailyFile, DAILY_ID, type DailyPick } from '../lib/daily'
+import { parseEmbyFile, EMBY_META_URL } from '../lib/emby'
 
 export interface Track {
   /** 由 stableId(url) 得出，跨会话稳定；收藏/历史类功能靠它对齐同一首歌 */
@@ -485,10 +486,11 @@ export const usePlayerStore = defineStore('player', {
      */
     async restore() {
       try {
-        const [plResp, metaResp, listsResp] = await Promise.all([
+        const [plResp, metaResp, listsResp, embyResp] = await Promise.all([
           fetch(PLAYLIST_URL, { cache: 'no-store' }),
           fetch(META_URL, { cache: 'no-store' }).catch(() => null),
           fetch(LISTS_URL, { cache: 'no-store' }).catch(() => null),
+          fetch(EMBY_META_URL, { cache: 'no-store' }).catch(() => null),
         ])
         if (!plResp.ok) return
 
@@ -500,8 +502,31 @@ export const usePlayerStore = defineStore('player', {
             /* meta.json 损坏则全部走运行时解析 */
           }
         }
+
+        /**
+         * Emby 音乐库（public/emby.json，由 `pnpm emby` 生成）。
+         * 与 meta.json 的不同在于它一份文件同时充当「曲目清单」和「元数据」：
+         * 每条都自带完整信息，所以键既是播放直链也是曲目来源。
+         * 产物缺失或损坏时整个跳过——页面退化成只有手写曲库，不会报错。
+         */
+        let embyUrls: string[] = []
+        if (embyResp?.ok) {
+          try {
+            const emby = parseEmbyFile(await embyResp.json())
+            embyUrls = Object.keys(emby)
+            cached = { ...cached, ...emby }
+          } catch {
+            /* 忽略 */
+          }
+        }
+
         // playlist.json 支持纯字符串与对象（带人工覆写字段）混排，统一在 parsePlaylist 里消化
         this.addUrls(parsePlaylist(await plResp.json()), cached)
+        // Emby 曲库排在人工曲库之后：playlist.json 是手工挑选的主曲库，顺序上保持在前
+        this.addUrls(
+          embyUrls.map((url) => ({ url, override: null })),
+          cached,
+        )
 
         this.radioSeed = (Math.random() * 0xffffffff) >>> 0
         if (listsResp?.ok) {
