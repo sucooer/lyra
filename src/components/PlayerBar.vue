@@ -1,11 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { usePlayerStore } from '../stores/player'
 
 const player = usePlayerStore()
 
 const progress = computed(() =>
   player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
+)
+
+/** 拖动中的预览比例（null = 未在拖动）；松手才真正 seek，避免流式音频频繁 range 请求 */
+const dragRatio = ref<number | null>(null)
+
+function ratioFrom(e: PointerEvent): number {
+  const el = e.currentTarget as HTMLElement
+  const r = el.getBoundingClientRect()
+  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+}
+
+function onDragDown(e: PointerEvent) {
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  dragRatio.value = ratioFrom(e)
+}
+function onDragMove(e: PointerEvent) {
+  if (dragRatio.value === null) return
+  dragRatio.value = ratioFrom(e)
+}
+function onDragUp(e: PointerEvent) {
+  if (dragRatio.value === null) return
+  player.seek(ratioFrom(e) * player.duration)
+  dragRatio.value = null
+}
+function onDragCancel() {
+  dragRatio.value = null
+}
+
+/** 拖动/点击时用于显示的时间 */
+const shownCurrent = computed(() =>
+  dragRatio.value !== null ? dragRatio.value * player.duration : player.currentTime,
 )
 
 function fmt(sec: number): string {
@@ -19,14 +50,6 @@ function onSeek(e: MouseEvent) {
   const el = e.currentTarget as HTMLElement
   const r = el.getBoundingClientRect()
   const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-  player.seek(ratio * player.duration)
-}
-
-function onTouchSeek(e: TouchEvent) {
-  const el = e.currentTarget as HTMLElement
-  const r = el.getBoundingClientRect()
-  const x = e.touches[0].clientX
-  const ratio = Math.min(1, Math.max(0, (x - r.left) / r.width))
   player.seek(ratio * player.duration)
 }
 </script>
@@ -117,30 +140,32 @@ function onTouchSeek(e: TouchEvent) {
       </div>
     </div>
 
-    <!-- 移动端：底部常驻进度条（触摸友好，带滑块圆点）。
-         滑轨与时间必须是上下两行：同一行居中会让 12px 滑块压在时间文字上 -->
+    <!-- 移动端：底部常驻进度条（pointer 事件统一处理点击和拖动，松手才 seek） -->
     <div
-      class="md:hidden px-3 pt-2 pb-2"
-      @click="onSeek"
-      @touchstart="onTouchSeek"
+      class="md:hidden px-3 pt-2 pb-2 touch-none select-none"
+      @pointerdown="onDragDown"
+      @pointermove="onDragMove"
+      @pointerup="onDragUp"
+      @pointercancel="onDragCancel"
     >
       <!-- 滑轨行：容器高度 = 滑块高度，滑块完整落在行内不外溢 -->
       <div class="relative h-3.5 flex items-center cursor-pointer">
         <div class="absolute inset-x-0 h-1 bg-white/15 rounded-full">
           <div
             class="absolute left-0 top-0 h-full bg-white rounded-full"
-            :style="{ width: progress + '%' }"
+            :style="{ width: (dragRatio ?? progress) + '%' }"
           >
             <span
-              class="absolute -right-1.5 -top-1 w-3 h-3 rounded-full bg-white shadow"
+              class="absolute -right-1.5 -top-1 w-3 h-3 rounded-full bg-white shadow transition-transform"
+              :class="dragRatio !== null ? 'scale-125' : ''"
             ></span>
           </div>
         </div>
       </div>
       <!-- 时间行：与滑轨间隔 6px，滑块碰不到 -->
       <div class="flex justify-between mt-1.5 text-[10px] text-white/40 tabular-nums">
-        <span>{{ fmt(player.currentTime) }}</span>
-        <span>-{{ fmt(Math.max(0, player.duration - player.currentTime)) }}</span>
+        <span>{{ fmt(shownCurrent) }}</span>
+        <span>-{{ fmt(Math.max(0, player.duration - shownCurrent)) }}</span>
       </div>
     </div>
   </div>

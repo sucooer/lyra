@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { reactive } from 'vue'
+import { markRaw, reactive } from 'vue'
 import {
   parseTrackMeta,
   fetchSidecarLrc,
@@ -86,6 +86,11 @@ export const usePlayerStore = defineStore('player', {
       a.addEventListener('loadedmetadata', () => {
         this.duration = a.duration
       })
+      // 暂停状态下 seek 不会触发 timeupdate，必须监听 seeked 同步界面
+      a.addEventListener('seeked', () => {
+        this.currentTime = a.currentTime
+        updatePositionState(this)
+      })
       a.addEventListener('ended', () => this.onEnded())
       a.addEventListener('play', () => {
         this.playing = true
@@ -96,16 +101,24 @@ export const usePlayerStore = defineStore('player', {
         updateMediaSession(this)
       })
       a.addEventListener('error', () => {
-        // 直连音频加载失败时，走代理重载一次
+        // 直连音频加载/取数失败时，走代理重载一次，并恢复出错前的播放位置。
+        // 不恢复进度的话，seek 触发的网络错误会把歌曲拉回开头（表现为"seek 从头播"）。
         const cur = this.currentTrack
-        if (cur && a.src && !a.src.includes('/api/proxy')) {
-          a.src = `/api/proxy?url=${encodeURIComponent(cur.url)}`
-          a.load()
-          if (this.playing) a.play().catch(() => {})
+        if (!cur || !a.src || a.src.includes('/api/proxy')) return
+        const resumeAt = a.currentTime
+        const wasPlaying = this.playing
+        a.src = `/api/proxy?url=${encodeURIComponent(cur.url)}`
+        a.load()
+        const restore = () => {
+          a.removeEventListener('loadedmetadata', restore)
+          a.currentTime = resumeAt
+          if (wasPlaying) a.play().catch(() => {})
         }
+        a.addEventListener('loadedmetadata', restore)
       })
       a.volume = this.volume
-      this.audio = a
+      // markRaw：audio 不需要响应式包装，避免 Proxy 影响 DOM API 行为
+      this.audio = markRaw(a)
       setupMediaSession(this)
     },
 
@@ -228,7 +241,10 @@ export const usePlayerStore = defineStore('player', {
     },
 
     seek(sec: number) {
-      if (this.audio) this.audio.currentTime = sec
+      if (!this.audio) return
+      // 钳制到有效区间，防止负值或超出时长导致浏览器行为异常
+      const d = this.duration
+      this.audio.currentTime = d > 0 ? Math.min(Math.max(0, sec), d - 0.25) : Math.max(0, sec)
     },
 
     setVolume(v: number) {

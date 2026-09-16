@@ -7,6 +7,36 @@ const player = usePlayerStore()
 const showLyrics = ref(false)
 const bgColor = ref('rgb(30,30,32)')
 
+/** 拖动中的预览比例（null = 未在拖动）；松手才真正 seek */
+const dragRatio = ref<number | null>(null)
+
+function ratioFrom(e: PointerEvent): number {
+  const el = e.currentTarget as HTMLElement
+  const r = el.getBoundingClientRect()
+  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+}
+function onDragDown(e: PointerEvent) {
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  dragRatio.value = ratioFrom(e)
+}
+function onDragMove(e: PointerEvent) {
+  if (dragRatio.value !== null) dragRatio.value = ratioFrom(e)
+}
+function onDragUp(e: PointerEvent) {
+  if (dragRatio.value === null) return
+  player.seek(ratioFrom(e) * player.duration)
+  dragRatio.value = null
+}
+function onDragCancel() {
+  dragRatio.value = null
+}
+const shownProgress = computed(() =>
+  dragRatio.value !== null ? dragRatio.value * 100 : progress.value,
+)
+const shownCurrent = computed(() =>
+  dragRatio.value !== null ? dragRatio.value * player.duration : player.currentTime,
+)
+
 /** 从封面提取主色调（canvas 平均色，Apple Music 风格背景） */
 async function extractColor(src: string) {
   try {
@@ -46,12 +76,6 @@ function fmt(sec: number): string {
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
   return `${m}:${String(s).padStart(2, '0')}`
-}
-
-function onSeek(e: MouseEvent) {
-  const el = e.currentTarget as HTMLElement
-  const r = el.getBoundingClientRect()
-  player.seek(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * player.duration)
 }
 </script>
 
@@ -116,14 +140,14 @@ function onSeek(e: MouseEvent) {
           </div>
         </div>
 
-        <!-- 进度 -->
-        <div class="mt-5">
-          <div class="h-1.5 bg-white/20 rounded-full cursor-pointer group" @click="onSeek">
-            <div class="h-full bg-white rounded-full relative transition-colors group-hover:bg-red-500" :style="{ width: progress + '%' }"></div>
+        <!-- 进度（支持点击与拖动，松手生效） -->
+        <div class="mt-5 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
+          <div class="h-1.5 bg-white/20 rounded-full cursor-pointer group">
+            <div class="h-full bg-white rounded-full relative transition-colors group-hover:bg-red-500" :style="{ width: shownProgress + '%' }"></div>
           </div>
           <div class="flex justify-between text-xs text-white/50 tabular-nums mt-1.5">
-            <span>{{ fmt(player.currentTime) }}</span>
-            <span>-{{ fmt(Math.max(0, player.duration - player.currentTime)) }}</span>
+            <span>{{ fmt(shownCurrent) }}</span>
+            <span>-{{ fmt(Math.max(0, player.duration - shownCurrent)) }}</span>
           </div>
         </div>
 
@@ -174,11 +198,11 @@ function onSeek(e: MouseEvent) {
     <!-- 歌词视图（全屏滚动，底部保留进度条） -->
     <div v-else class="relative z-10 flex-1 min-h-0 flex flex-col pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <LyricsView class="flex-1 min-h-0" />
-      <div class="px-6 md:px-14 pt-3 shrink-0">
+      <div class="px-6 md:px-14 pt-3 shrink-0 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
         <div class="flex items-center gap-3">
-          <span class="text-xs text-white/50 tabular-nums w-10">{{ fmt(player.currentTime) }}</span>
-          <div class="flex-1 h-1 bg-white/20 rounded-full cursor-pointer" @click="onSeek">
-            <div class="h-full bg-white/80 rounded-full" :style="{ width: progress + '%' }"></div>
+          <span class="text-xs text-white/50 tabular-nums w-10">{{ fmt(shownCurrent) }}</span>
+          <div class="flex-1 h-1 bg-white/20 rounded-full cursor-pointer">
+            <div class="h-full bg-white/80 rounded-full" :style="{ width: shownProgress + '%' }"></div>
           </div>
           <button class="text-white/80 hover:text-white transition shrink-0" @click="player.togglePlay" title="播放/暂停">
             <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M8 5v14l11-7z"/></svg>

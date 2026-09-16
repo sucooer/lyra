@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { findLyricIndex } from '../lib/lrc'
 
@@ -11,28 +11,66 @@ let scrollTimer: ReturnType<typeof setTimeout> | null = null
 const lyrics = computed(() => player.currentTrack?.lyrics ?? [])
 const activeIndex = computed(() => findLyricIndex(lyrics.value, player.currentTime))
 
+/** rAF 缓动滚动（easeOutQuint），复刻 Apple Music 的柔和跟随动画 */
+let animId = 0
+function animateScrollTo(targetY: number) {
+  const el = container.value
+  if (!el) return
+  cancelAnimationFrame(animId)
+  const startY = el.scrollTop
+  const delta = targetY - startY
+  if (Math.abs(delta) < 1) return
+  const duration = 700
+  const t0 = performance.now()
+  const ease = (x: number) => 1 - Math.pow(1 - x, 5)
+  const step = (now: number) => {
+    const p = Math.min(1, (now - t0) / duration)
+    el.scrollTop = startY + delta * ease(p)
+    if (p < 1) animId = requestAnimationFrame(step)
+  }
+  animId = requestAnimationFrame(step)
+}
+
 watch(activeIndex, async (idx) => {
   if (idx < 0 || manualScrolling.value) return
   await nextTick()
-  const el = container.value?.querySelectorAll<HTMLElement>('.lyric-line')[idx]
-  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const el = container.value
+  if (!el) return
+  const line = el.querySelectorAll<HTMLElement>('.lyric-line')[idx]
+  if (!line) return
+  // 目标：当前行垂直居中
+  const target = line.offsetTop - el.clientHeight / 2 + line.clientHeight / 2
+  animateScrollTo(target)
 })
 
 function onUserScroll() {
   manualScrolling.value = true
+  cancelAnimationFrame(animId)
   if (scrollTimer) clearTimeout(scrollTimer)
   scrollTimer = setTimeout(() => (manualScrolling.value = false), 2500)
+}
+
+/** 手动滚走后点这里恢复跟随 */
+function resumeFollow() {
+  manualScrolling.value = false
+  const idx = activeIndex.value
+  const el = container.value
+  if (idx < 0 || !el) return
+  const line = el.querySelectorAll<HTMLElement>('.lyric-line')[idx]
+  if (line) animateScrollTo(line.offsetTop - el.clientHeight / 2 + line.clientHeight / 2)
 }
 
 function jump(t: number) {
   player.seek(t)
 }
+
+onBeforeUnmount(() => cancelAnimationFrame(animId))
 </script>
 
 <template>
   <div
     ref="container"
-    class="lyrics-scroll h-full overflow-y-auto px-6 py-[25%] md:py-[40%] space-y-5"
+    class="lyrics-scroll relative h-full overflow-y-auto px-6 py-[25%] md:py-[40%] space-y-5"
     @wheel="onUserScroll"
     @touchmove="onUserScroll"
   >
@@ -40,13 +78,13 @@ function jump(t: number) {
       <div
         v-for="(line, i) in lyrics"
         :key="i"
-        class="lyric-line text-xl md:text-2xl font-bold leading-snug cursor-pointer transition-all duration-300 origin-left"
+        class="lyric-line font-bold leading-snug cursor-pointer origin-left transition-all duration-500 ease-out will-change-transform"
         :class="
           i === activeIndex
-            ? 'text-white scale-100'
+            ? 'text-white scale-110 md:scale-125'
             : i < activeIndex
-              ? 'text-white/35'
-              : 'text-white/35 hover:text-white/60'
+              ? 'text-white/30 scale-100'
+              : 'text-white/35 scale-100 hover:text-white/60'
         "
         @click="jump(line.time)"
       >
@@ -59,5 +97,15 @@ function jump(t: number) {
       </template>
       <template v-else>暂无歌词</template>
     </div>
+
+    <!-- 手动滚离当前行后出现，点击回到当前行 -->
+    <button
+      v-if="manualScrolling && lyrics.length"
+      class="fixed bottom-24 right-5 z-10 w-9 h-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center text-white/80 shadow-lg transition hover:bg-white/25"
+      title="回到当前行"
+      @click="resumeFollow"
+    >
+      <svg viewBox="0 0 24 24" class="w-4.5 h-4.5 fill-current"><path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+    </button>
   </div>
 </template>
