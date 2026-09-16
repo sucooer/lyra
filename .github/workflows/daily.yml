@@ -1,0 +1,51 @@
+name: 每日推荐
+
+# 每天生成一份当天的「每日推荐」并提交，部署平台收到提交后重新构建。
+#
+# 时间：cron 只认 UTC，16:05 UTC = 北京 00:05 —— 错开整点是因为 GitHub 的
+# 定时任务在整点排队最严重，经常延迟十几分钟到一小时。
+on:
+  schedule:
+    - cron: '5 16 * * *'
+  workflow_dispatch: # 手动补跑：仓库 Actions 页面 → Run workflow
+
+permissions:
+  contents: write # 要提交 public/daily.json
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    env:
+      # 决定脚本里「今天」是哪一天：这一步跑在北京 00:05，用 UTC 会算成昨天
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 要 rebase，浅克隆下历史不全
+
+      # gen-daily.mjs 直接 import 了 src/lib/daily.ts（与前端共用同一份选歌规则），
+      # Node 的类型擦除要 ≥22.18 才默认开启，所以这里不能降版本
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 生成 public/daily.json
+        run: node scripts/gen-daily.mjs
+
+      - name: 提交并推送
+        run: |
+          git add public/daily.json
+          if git diff --cached --quiet; then
+            echo "日期与曲目都和上次一样，跳过提交"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(daily): 每日推荐 $(date +%F)"
+          # 刚好撞上手动提交时先 rebase 再推，不然这一步会因非快进失败
+          git pull --rebase --autostash
+          git push

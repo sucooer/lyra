@@ -18,7 +18,7 @@ export interface PlaylistDef {
   cover?: string
   /** true = 包含全部曲目 */
   all?: boolean
-  /** 精确匹配（忽略大小写与首尾空格）曲目直链 */
+  /** 精确匹配（忽略大小写与首尾空格）曲目直链；同时决定该歌单的曲目顺序 */
   urls?: string[]
   /** 精确匹配曲名 */
   titles?: string[]
@@ -66,6 +66,25 @@ export function playlistMatches(def: PlaylistDef, t: Matchable): boolean {
   if (def.artists?.some((x) => eq(x, m.artist ?? ''))) return true
   if (def.albums?.some((x) => eq(x, m.album ?? ''))) return true
   return false
+}
+
+/**
+ * 按 def.urls 里写下的顺序排列（只对显式列了直链的歌单生效）。
+ *
+ * 把 urls 当「筛选条件」时顺序无所谓，但当「名单」用的时候顺序就是内容的一部分：
+ * 每日推荐每天的次序是日期种子打乱出来的，如果这里不认它的顺序，列表会按曲库顺序显示，
+ * 那份打乱就白做了（实测就是这个症状：歌单页的曲目顺序和「全部歌曲」一致）。
+ */
+export function orderByUrls<T extends Matchable>(def: PlaylistDef, tracks: T[]): T[] {
+  if (!def.urls?.length) return tracks
+  const rank = new Map<string, number>()
+  def.urls.forEach((u, i) => {
+    const k = u.trim().toLowerCase()
+    if (!rank.has(k)) rank.set(k, i)
+  })
+  const of = (t: T) => rank.get(t.url.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
+  // sort 是稳定的：没有排名的曲目不会被重新编组，只是整体排到名单之后
+  return [...tracks].sort((a, b) => of(a) - of(b))
 }
 
 /** 过滤掉结构不合法的条目（playlists.json 手写时容易漏字段） */

@@ -14,6 +14,7 @@ import { filenameOf, stableId } from '../lib/track'
 import {
   normalizePlaylists,
   playlistMatches,
+  orderByUrls,
   isRadio,
   type PlaylistDef,
 } from '../lib/playlists'
@@ -23,6 +24,7 @@ import {
   type TrackOverride,
   type PlaylistEntry,
 } from '../lib/playlist'
+import { buildDaily, dateKey, parseDailyFile, DAILY_ID, type DailyPick } from '../lib/daily'
 
 export interface Track {
   /** 由 stableId(url) 得出，跨会话稳定；收藏/历史类功能靠它对齐同一首歌 */
@@ -60,6 +62,8 @@ export type RepeatMode = 'off' | 'all' | 'one'
 const PLAYLIST_URL = '/playlist.json'
 const META_URL = '/meta.json'
 const LISTS_URL = '/playlists.json'
+/** cron（.github/workflows/daily.yml）每天生成的当天推荐 */
+const DAILY_URL = '/daily.json'
 
 /** 只回收运行时解析产生的 blob 封面；预生成的封面是普通路径，不能 revoke */
 function revokeCover(url?: string) {
@@ -118,7 +122,9 @@ export const usePlayerStore = defineStore('player', {
           return {
             def,
             isRadio: isR,
-            tracks: isR ? state.tracks : state.tracks.filter((t) => playlistMatches(def, t)),
+            tracks: isR
+              ? state.tracks
+              : orderByUrls(def, state.tracks.filter((t) => playlistMatches(def, t))),
           }
         })
         .filter((c) => c.tracks.length > 0)
@@ -505,12 +511,52 @@ export const usePlayerStore = defineStore('player', {
             /* playlists.json 损坏则只显示资料库列表 */
           }
         }
+        // 放在歌单之后：它会把自己插到列表最前面
+        await this.loadDaily()
       } catch {
         /* ignore */
       } finally {
         // 无论成败都要置位：失败时也该显示「空歌单」而不是永远转圈
         this.playlistLoaded = true
       }
+    },
+
+    /**
+     * 每日推荐：优先读 cron 预生成的 public/daily.json，缺失或不是今天的
+     * （cron 没跑成、或本地开发没跑过 `pnpm daily`）就按同一套规则就地现算。
+     * 选歌规则在 lib/daily.ts 里由前端与脚本共用，所以两条路结果一致，
+     * 页面永远有当天的一份，不会因为部署没跟上就空着。
+     */
+    async loadDaily() {
+      if (this.tracks.length === 0) return
+      const today = dateKey()
+      let pick: DailyPick | null = null
+      try {
+        const resp = await fetch(DAILY_URL, { cache: 'no-store' })
+        if (resp.ok) {
+          const file = parseDailyFile(await resp.json())
+          // 只认当天那份：留着昨天的清单比现算还糟，等于推荐不更新
+          if (file && file.date === today) pick = file
+        }
+      } catch {
+        /* 拿不到文件就现算 */
+      }
+      pick ??= buildDaily(
+        this.tracks.map((t) => t.url),
+        today,
+      )
+      if (pick.urls.length === 0) return
+
+      const def: PlaylistDef = {
+        id: DAILY_ID,
+        type: 'playlist',
+        title: pick.title,
+        subtitle: pick.subtitle,
+        // urls 是精确匹配：名单外的一律不收，改歌手名也不会让推荐跑偏
+        urls: pick.urls,
+      }
+      // 固定排在最前；playlists.json 里若手写了同 id 的定义，以每天生成的这份为准
+      this.playlists = [def, ...this.playlists.filter((p) => p.id !== DAILY_ID)]
     },
   },
 })
