@@ -69,8 +69,8 @@ function onTouchSeek(e: TouchEvent) {
       <!-- 控制区：移动端只留 prev/play/next，桌面端全量 -->
       <div class="flex items-center justify-end sm:justify-center gap-3 sm:gap-6 shrink-0">
         <button
-          class="hidden sm:flex text-white/60 hover:text-white transition shrink-0"
-          :class="{ 'text-red-500': player.shuffle }"
+          class="hidden sm:flex transition shrink-0"
+          :class="player.shuffle ? 'text-red-500' : 'text-white/60 hover:text-white'"
           @click="player.shuffle = !player.shuffle"
           title="随机播放"
         >
@@ -90,8 +90,8 @@ function onTouchSeek(e: TouchEvent) {
           <svg viewBox="0 0 24 24" class="w-6 h-6 sm:w-6 sm:h-6 fill-current"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
         </button>
         <button
-          class="hidden sm:flex text-white/60 hover:text-white transition shrink-0"
-          :class="{ 'text-red-500': player.repeat !== 'off' }"
+          class="hidden sm:flex transition shrink-0"
+          :class="player.repeat !== 'off' ? 'text-red-500' : 'text-white/60 hover:text-white'"
           @click="player.cycleRepeat"
           title="循环"
         >
