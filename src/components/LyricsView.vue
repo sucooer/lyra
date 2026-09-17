@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { findLyricIndex } from '../lib/lrc'
 
@@ -10,6 +10,45 @@ let scrollTimer: ReturnType<typeof setTimeout> | null = null
 
 const lyrics = computed(() => player.currentTrack?.lyrics ?? [])
 const activeIndex = computed(() => findLyricIndex(lyrics.value, player.currentTime))
+
+/**
+ * 跟随锚点：当前行落在歌词区高度的 40% 处（略高于垂直居中）。
+ *
+ * 首尾留白必须按**容器高度**算，不能写成 py-[40%] 这种百分比 —— CSS 里
+ * padding 的百分比恒相对**包含块宽度**解析，宽屏下 40% 宽度 = 400px+，
+ * 等于给顶部凭空垫一大块，整段歌词被压到屏幕下半部分。
+ */
+const ANCHOR = 0.4
+const padTop = ref(0)
+const padBottom = ref(0)
+let ro: ResizeObserver | null = null
+
+onMounted(() => {
+  const el = container.value
+  if (!el) return
+  const sync = () => {
+    const h = el.clientHeight
+    padTop.value = Math.round(h * ANCHOR)
+    padBottom.value = Math.max(0, h - padTop.value)
+  }
+  // 观察 border-box：padding 变化不会改变它，天然不会自激循环
+  ro = new ResizeObserver(sync)
+  ro.observe(el, { box: 'border-box' })
+  sync()
+  // 首帧拿到真实高度后再定位一次：下面的 watch 没带 immediate，
+  // 直接切进歌词视图时不会自动滚，会从第一行开始显示
+  requestAnimationFrame(() => {
+    sync()
+    const idx = activeIndex.value
+    const line = idx >= 0 ? el.querySelectorAll<HTMLElement>('.lyric-line')[idx] : null
+    if (line) el.scrollTop = Math.max(0, targetFor(line, el))
+  })
+})
+
+/** 把某一行滚到锚点所需的 scrollTop */
+function targetFor(line: HTMLElement, el: HTMLElement): number {
+  return line.offsetTop - el.clientHeight * ANCHOR + line.clientHeight / 2
+}
 
 /** rAF 缓动滚动（easeOutQuint），复刻 Apple Music 的柔和跟随动画 */
 let animId = 0
@@ -38,9 +77,7 @@ watch(activeIndex, async (idx) => {
   if (!el) return
   const line = el.querySelectorAll<HTMLElement>('.lyric-line')[idx]
   if (!line) return
-  // 目标：当前行垂直居中
-  const target = line.offsetTop - el.clientHeight / 2 + line.clientHeight / 2
-  animateScrollTo(target)
+  animateScrollTo(targetFor(line, el))
 })
 
 function onUserScroll() {
@@ -57,20 +94,24 @@ function resumeFollow() {
   const el = container.value
   if (idx < 0 || !el) return
   const line = el.querySelectorAll<HTMLElement>('.lyric-line')[idx]
-  if (line) animateScrollTo(line.offsetTop - el.clientHeight / 2 + line.clientHeight / 2)
+  if (line) animateScrollTo(targetFor(line, el))
 }
 
 function jump(t: number) {
   player.seek(t)
 }
 
-onBeforeUnmount(() => cancelAnimationFrame(animId))
+onBeforeUnmount(() => {
+  cancelAnimationFrame(animId)
+  ro?.disconnect()
+})
 </script>
 
 <template>
   <div
     ref="container"
-    class="lyrics-scroll relative h-full overflow-y-auto px-6 py-[25%] md:py-[40%] space-y-5"
+    class="lyrics-scroll relative h-full overflow-y-auto px-6 space-y-5"
+    :style="{ paddingTop: padTop + 'px', paddingBottom: padBottom + 'px' }"
     @wheel="onUserScroll"
     @touchmove="onUserScroll"
   >
