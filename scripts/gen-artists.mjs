@@ -37,6 +37,12 @@ const OUT = path.join(ROOT, 'public', 'artists.json')
 
 /** 查过之后多少天再刷一次 */
 const REFRESH_DAYS = 30
+/**
+ * 简介抓取规则的版本号。改动抓取/清洗逻辑时 +1，存量条目会自动重抓一遍 ——
+ * 否则「已经有简介就跳过」的增量判断会让老数据永远停在旧规则上
+ * （比如后来才发现中文维基该带 variant=zh-cn，不重抓就一直是那批名字对不上的）。
+ */
+const BIO_VERSION = 2
 /** 单个请求超时：网络不通时别把构建拖死 */
 const TIMEOUT = 12000
 /** 并发：抓的都是第三方站点，别开太高 */
@@ -345,7 +351,10 @@ async function wikiBio(name, lang) {
     `https://${lang}.wikipedia.org/w/api.php?action=query&format=json` +
     // exlimit=max 不能省：prop=extracts 默认只给 1 个条目生成摘要，
     // 搜索兜底一次返回 5 个候选时，等于只看得到其中一条，命中率忽高忽低。
-    `&prop=extracts|pageprops&exintro=1&explaintext=1&exlimit=max&redirects=1&ppprop=disambiguation`
+    '&prop=extracts|pageprops&exintro=1&explaintext=1&exlimit=max&redirects=1&ppprop=disambiguation' +
+    // zh 维基加变体转换：曲库写简体，条目名却常是繁体（周传雄 → 周傳雄），
+    // 不转换标题就对不上，正确的条目会被整条丢掉；顺带让简介也统一成简体。
+    (lang === 'zh' ? '&variant=zh-cn&converttitles=1' : '')
   const exact = await get(`${base}&titles=${encodeURIComponent(name)}`, { as: 'json' })
   const hit = pickBio(exact, name, lang)
   if (hit) return hit
@@ -471,14 +480,21 @@ function ageOf(name) {
   const at = prevRaw?.artists?.[name]?.checkedAt
   return at ? (now - Date.parse(at)) / 86400000 : Infinity
 }
+/** 上一次抓简介用的是哪版规则（同样绕开 parseArtistsFile，从原始 JSON 取） */
+function bioVerOf(name) {
+  return prevRaw?.artists?.[name]?.bioVersion ?? 0
+}
 
 const now = Date.now()
 const target = [...libArtists.values()].filter((a) => {
   const p = prev.artists[a.name]
   if (force || !p) return true
   // 简介与专辑分别判断：已经有专辑数据的歌手如果因为「有内容」被整体跳过，
-  // 那第一次没抓到简介就永远补不上了（在本地跑的时候必然抓不到维基百科）
-  return !p.bio || !p.albums?.length || ageOf(a.name) > REFRESH_DAYS
+  // 那第一次没抓到简介就永远补不上了（在本地跑的时候必然抓不到维基百科）。
+  // bioVersion 对不上说明抓取规则更新过，也要重抓一次。
+  return (
+    !p.bio || !p.albums?.length || ageOf(a.name) > REFRESH_DAYS || bioVerOf(a.name) !== BIO_VERSION
+  )
 })
 const todo = limit ? target.slice(0, limit) : target
 
@@ -503,6 +519,7 @@ const results = await mapPool(todo, JOBS, async (a) => {
     bio: old?.bio,
     bioSource: old?.bioSource,
     bioUrl: old?.bioUrl,
+    bioVersion: old?.bioVersion,
     amId: old?.amId,
     amUrl: old?.amUrl,
   }
@@ -513,7 +530,7 @@ const results = await mapPool(todo, JOBS, async (a) => {
     info.bioUrl = undefined
   }
   const wantAlbums = force || !info.albums?.length || ageOf(a.name) > REFRESH_DAYS
-  const wantBio = force || !info.bio
+  const wantBio = force || !info.bio || bioVerOf(a.name) !== BIO_VERSION
 
   if (wantAlbums) {
     const am = await appleArtistId(a.name)
@@ -539,6 +556,9 @@ const results = await mapPool(todo, JOBS, async (a) => {
       info.bio = bio.bio
       info.bioSource = bio.source
       info.bioUrl = bio.url
+      // 只有真抓到才记版本号：这一轮失败的话下次还得再试，
+      // 否则「规则升级后重抓」的机会一次就被用掉了
+      info.bioVersion = BIO_VERSION
     } else {
       diag = bio?.diag ?? ''
     }
