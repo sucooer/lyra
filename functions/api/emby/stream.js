@@ -28,7 +28,7 @@ export async function onRequest(context) {
     return new Response(null, { status: 204, headers: CORS })
   }
 
-  const base = (env.EMBY_URL || '').replace(/\/+$/, '')
+  const base = (env.EMBY_URL || '').trim().replace(/\/+$/, '')
   const key = env.EMBY_API_KEY || ''
   if (!base || !key) {
     // 明确区分「没配」和「取不到」，否则线上只会看到一坨 502 不知道去配环境变量
@@ -36,6 +36,21 @@ export async function onRequest(context) {
       status: 501,
       headers: CORS,
     })
+  }
+
+  // EMBY_URL 必须是完整的 http(s)://host[:port]。填错时别让它变成线上一个莫名其妙的
+  // 403/502——把当前值原样回显（host:port 不是机密），一眼看出填错在哪。
+  // 实测踩过：值指到一个 Cloudflare 代理的 IP 时，上游会回 403 + "error code: 1003"。
+  let upstreamOrigin = ''
+  try {
+    const u = new URL(base)
+    if (/^https?:$/.test(u.protocol)) upstreamOrigin = u.origin
+  } catch { /* 保持空串 */ }
+  if (!upstreamOrigin) {
+    return new Response(
+      `EMBY_URL 不是合法的 http(s) 地址（当前值：${JSON.stringify(String(env.EMBY_URL || '')).slice(0, 120)}，需要形如 http://host:port）`,
+      { status: 500, headers: CORS },
+    )
   }
 
   const id = new URL(request.url).searchParams.get('id') || ''
@@ -67,6 +82,8 @@ export async function onRequest(context) {
   const out = new Headers(resp.headers)
   for (const [k, v] of Object.entries(CORS)) out.set(k, v)
   out.delete('content-security-policy')
+  // 诊断用：非 2xx 时能直接看出上游是谁（不含密钥）
+  if (!resp.ok) out.set('x-emby-upstream', upstreamOrigin)
 
   return new Response(resp.body, {
     status: resp.status,

@@ -19,10 +19,24 @@ export default async function handler(req, res) {
     return
   }
 
-  const base = (process.env.EMBY_URL || '').replace(/\/+$/, '')
+  const base = (process.env.EMBY_URL || '').trim().replace(/\/+$/, '')
   const key = process.env.EMBY_API_KEY || ''
   if (!base || !key) {
     res.status(501).send('Emby 未配置：需要在服务端设置 EMBY_URL 与 EMBY_API_KEY')
+    return
+  }
+
+  // EMBY_URL 必须是完整的 http(s)://host[:port]，填错时回显当前值（host:port 不是机密）。
+  // 与 functions/api/emby/stream.js 保持一致（那边有详细注释）。
+  let upstreamOrigin = ''
+  try {
+    const u = new URL(base)
+    if (/^https?:$/.test(u.protocol)) upstreamOrigin = u.origin
+  } catch { /* 保持空串 */ }
+  if (!upstreamOrigin) {
+    res.status(500).send(
+      `EMBY_URL 不是合法的 http(s) 地址（当前值：${JSON.stringify(String(process.env.EMBY_URL || '')).slice(0, 120)}，需要形如 http://host:port）`,
+    )
     return
   }
 
@@ -57,6 +71,8 @@ export default async function handler(req, res) {
     }
   }
   res.setHeader('Access-Control-Allow-Origin', '*')
+  // 诊断用：非 2xx 时能直接看出上游是谁（不含密钥）
+  if (!resp.ok) res.setHeader('x-emby-upstream', upstreamOrigin)
 
   if (!resp.body) {
     res.end()
