@@ -5,6 +5,8 @@
  * 决定。这里只补两样运行时拿不到的东西：
  *
  *   1. 歌手简介：Last.fm（配了 LASTFM_API_KEY 才用）→ 维基百科中文 → 英文。
+ *      维基先按条目标题精确查，查不到再用全文搜索兜底（舞台名/日文名/带符号的
+ *      写法标题对不上，正文搜得到）。
  *      Apple Music 自己的艺人简介已经在 2022 年前后下线了
  *      （music.apple.com/cn/artist/<id>/biography 现在返回「无法找到你所需的页面」，
  *      页面里剩下的 artistBio 只有一个需要鉴权的异步接口，抓不到）。
@@ -252,24 +254,55 @@ async function lastfmBio(name, lang) {
   return { bio: text, url: j?.artist?.url }
 }
 
-/** 维基百科导言：redirects=1 能把「Bandari」带到「班得瑞」 */
-async function wikiBio(name, lang) {
-  const j = await get(
-    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&redirects=1&titles=${encodeURIComponent(name)}`,
-    { as: 'json' },
-  )
-  const pages = j?.query?.pages ?? {}
-  for (const p of Object.values(pages)) {
+/** 消歧义页不算简介：维基会打 pageprops.disambiguation 标记，正文正则只兜得住英文 */
+function isDisambig(p, text) {
+  if (p.pageprops?.disambiguation !== undefined) return true
+  return /can refer to:|可以指|可能指|消歧義頁|消歧义页|同名人物/.test(text.slice(0, 160))
+}
+
+function mkBio(p, text, lang) {
+  return { bio: text, url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(p.title)}` }
+}
+
+/**
+ * 从 query.pages 里挑一条能当简介的。
+ * generator=search 的结果带 index（相关性排序），精确查询没有，按返回顺序处理。
+ * 只有标题能与歌手名对上（相等，或互相包含）才算命中 —— 搜索会返回一堆同名
+ * 或沾边的条目，不校验就会把「徐良（明朝人物）」的简介安到歌手头上。
+ */
+function pickBio(j, name, lang) {
+  const pages = Object.values(j?.query?.pages ?? {})
+  pages.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+  const want = normName(name)
+  let loose = null
+  for (const p of pages) {
     if (p.missing !== undefined || !p.extract) continue
     const text = String(p.extract).trim()
-    // 消歧义页（「Bandari can refer to:」）不算简介
-    if (text.length < 60 || /can refer to:/i.test(text)) continue
-    return {
-      bio: text,
-      url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(p.title)}`,
-    }
+    if (text.length < 60 || isDisambig(p, text)) continue
+    const title = normName(p.title)
+    if (title === want) return mkBio(p, text, lang)
+    if (!loose && (title.includes(want) || want.includes(title))) loose = mkBio(p, text, lang)
   }
-  return null
+  return loose
+}
+
+/**
+ * 维基百科导言。
+ * 先按条目标题精确查（redirects=1 既能处理重定向，也能跨繁简，如 Bandari→班得瑞）；
+ * 查不到再退回全文搜索 —— 曲库里不少歌手用的是舞台名、日文名或带符号的写法
+ * （「S.E.N.S」「矶村由纪子」「DJ OKAWARI」），标题对不上但正文搜得到。
+ */
+async function wikiBio(name, lang) {
+  const base =
+    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json` +
+    `&prop=extracts|pageprops&exintro=1&explaintext=1&redirects=1&ppprop=disambiguation`
+  const exact = await get(`${base}&titles=${encodeURIComponent(name)}`, { as: 'json' })
+  const hit = pickBio(exact, name, lang)
+  if (hit || MULTI_ARTIST.test(name)) return hit
+  const found = await get(`${base}&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=5`, {
+    as: 'json',
+  })
+  return pickBio(found, name, lang)
 }
 
 /**
@@ -287,6 +320,7 @@ function clipBio(s) {
 }
 
 async function fetchBio(name) {
+  if (NOT_A_PERSON.has(normName(name))) return null
   let r = null
   if (LASTFM_KEY) {
     r = (await lastfmBio(name, 'zh')) ?? (await lastfmBio(name, 'en'))
@@ -327,6 +361,20 @@ async function readJson(p, fallback) {
     return fallback
   }
 }
+
+/**
+ * 曲库里的「合辑占位名」，不是具体歌手。拿它们去查维基只会撞上无关条目：
+ * 「群星」落到同名消歧义页，「Various Artists」被重定向到「Compilation album（合辑）」，
+ * 页面上挂着这种"简介"比空着更糟。专辑数据照抓（Apple Music 上 Various Artists
+ * 是真实存在的合辑艺人），只是不写简介。
+ */
+const NOT_A_PERSON = new Set(['群星', 'variousartists', 'va', '未知艺术家', 'unknownartist'])
+
+/**
+ * 多人联名（「阿悄 & 徐良」）：维基上没有对应条目，搜索兜底会命中其中某一位的
+ * 个人条目，把单人简介安到组合头上，所以这类只做精确查询、不用搜索兜底。
+ */
+const MULTI_ARTIST = /[&,，、]/
 
 function collectArtists() {
   const emby = JSON.parse(readFileSync(path.join(ROOT, 'public', 'emby.json'), 'utf8'))
@@ -401,6 +449,12 @@ const results = await mapPool(todo, JOBS, async (a) => {
     bioUrl: old?.bioUrl,
     amId: old?.amId,
     amUrl: old?.amUrl,
+  }
+  // 合辑占位名：上一轮可能已经撞到了消歧义页/无关重定向，继承下来的错误简介要主动清掉
+  if (NOT_A_PERSON.has(normName(a.name))) {
+    info.bio = undefined
+    info.bioSource = undefined
+    info.bioUrl = undefined
   }
   const wantAlbums = force || !info.albums?.length || ageOf(a.name) > REFRESH_DAYS
   const wantBio = force || !info.bio
