@@ -175,13 +175,37 @@ export const usePlayerStore = defineStore('player', {
     },
 
     /**
+     * id → 曲目下标。凡是「按 id 找曲目 / 找位置」的地方都走它：
+     * 原先是每处现写 tracks.findIndex / tracks.some，单看是 O(n)，
+     * 一旦套进「遍历一份 n 长的 id 列表」，整体就退化成 O(n²) ——
+     * 4000 首的曲库上是 1600 万次比较，实测「播放全部」被卡住 6 秒。
+     */
+    trackIndexById(state): Map<string, number> {
+      const m = new Map<string, number>()
+      state.tracks.forEach((t, i) => m.set(t.id, i))
+      return m
+    },
+    /** 曲库里现存的 id 集合，供 setContext / playOrder 做存在性判定 */
+    trackIdSet(state): Set<string> {
+      return new Set(state.tracks.map((t) => t.id))
+    },
+    /**
+     * 「接下来播放」的 id 集合。
+     * 列表里每一行都要判断自己有没有排队，写成 upNext.includes(id) 的话
+     * 行数 × 队列长度，且队列一变全表重算。
+     */
+    upNextSet(state): Set<string> {
+      return new Set(state.upNext)
+    },
+
+    /**
      * 当前播放顺序：有歌单上下文就在歌单内循环，否则是整个资料库。
      * 顺带过滤已被移除的曲目。
      */
     playOrder(state): string[] {
-      const ids = state.context.length ? state.context : state.tracks.map((t) => t.id)
-      if (!state.context.length) return ids
-      return ids.filter((id) => state.tracks.some((t) => t.id === id))
+      if (!state.context.length) return state.tracks.map((t) => t.id)
+      const have = this.trackIdSet
+      return state.context.filter((id) => have.has(id))
     },
 
     /**
@@ -279,9 +303,13 @@ export const usePlayerStore = defineStore('player', {
      */
     addUrls(entries: PlaylistEntry[], cached: Record<string, CachedMeta> = {}) {
       const added: Track[] = []
+      // 用 Set 记住已经有的直链：原先每加一首都 some() 扫一遍曲库，
+      // 几千首的库整体入库就退化成 O(n²)（每次刷新都要跑一遍）
+      const seen = new Set(this.tracks.map((t) => t.url))
       for (const entry of entries) {
         const { url } = entry
-        if (this.tracks.some((t) => t.url === url)) continue
+        if (seen.has(url)) continue
+        seen.add(url)
         const hit = cached[url]
         // 必须用 reactive() 包一层：否则后续 loadMeta 拿到的是 raw 引用，
         // 对它的赋值不会触发界面更新（表现为永远"解析中…"）
@@ -382,8 +410,8 @@ export const usePlayerStore = defineStore('player', {
 
     /** 按 track id 播放（歌单详情页用，不改变播放上下文） */
     playId(id: string) {
-      const i = this.tracks.findIndex((t) => t.id === id)
-      if (i >= 0) this.play(i)
+      const i = this.trackIndexById.get(id)
+      if (i !== undefined) this.play(i)
     },
 
     /** 从「资料库」列表点播：退出歌单上下文，回到整个资料库顺序 */
@@ -506,7 +534,8 @@ export const usePlayerStore = defineStore('player', {
      * 否则上一张歌单排队的曲目会串到新歌单里。
      */
     setContext(ids: string[], label: string) {
-      this.context = ids.filter((id) => this.tracks.some((t) => t.id === id))
+      const have = this.trackIdSet
+      this.context = ids.filter((id) => have.has(id))
       this.contextLabel = label
     },
 
@@ -554,8 +583,8 @@ export const usePlayerStore = defineStore('player', {
       if (this.upNext.length > 0) {
         const id = this.upNext[0]
         this.upNext = this.upNext.slice(1)
-        const queued = this.tracks.findIndex((t) => t.id === id)
-        if (queued >= 0) {
+        const queued = this.trackIndexById.get(id)
+        if (queued !== undefined) {
           this.play(queued)
           return
         }
@@ -615,21 +644,22 @@ export const usePlayerStore = defineStore('player', {
 
     /** 「接下来播放」：插到队首，多次操作后点的那首排在最前（与 Apple Music 一致） */
     playNext(id: string) {
-      if (!this.tracks.some((t) => t.id === id)) return
+      if (!this.trackIndexById.has(id)) return
       if (this.currentTrack?.id === id) return
       this.upNext = [id, ...this.upNext.filter((x) => x !== id)]
     },
 
     /** 「最后播放」：追加到队尾 */
     playLast(id: string) {
-      if (!this.tracks.some((t) => t.id === id)) return
+      if (!this.trackIndexById.has(id)) return
       if (this.currentTrack?.id === id) return
       this.upNext = [...this.upNext.filter((x) => x !== id), id]
     },
 
     remove(id: string) {
-      const i = this.tracks.findIndex((t) => t.id === id)
-      if (i < 0) return
+      const at = this.trackIndexById.get(id)
+      if (at === undefined) return
+      const i = at
       this.upNext = this.upNext.filter((x) => x !== id)
       this.context = this.context.filter((x) => x !== id)
       const t = this.tracks[i]

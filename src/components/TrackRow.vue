@@ -31,7 +31,9 @@ const player = usePlayerStore()
 const menu = useTrackMenu()
 
 const active = computed(() => player.currentTrack?.id === props.track.id)
-const queued = computed(() => player.upNext.includes(props.track.id))
+// 走 Set 而不是 upNext.includes：一行一次 O(队列长度) 不算什么，
+// 但列表有几千行、且队列一变全表重算，实测是点击时的卡顿来源之一
+const queued = computed(() => player.upNextSet.has(props.track.id))
 
 function onRow() {
   if (active.value) player.togglePlay()
@@ -46,7 +48,14 @@ const album = computed(() => props.track.meta?.album ?? '')
  * 一个 artist 字段里可能写着好几位歌手（「阿悄, 庄心妍 & 王麟」），
  * 拆开后每人一个链接，各自能进自己的歌手页。
  */
-const artistParts = computed(() => splitArtists(props.track.meta?.artist ?? ''))
+const artistParts = computed(() =>
+  // 展示名在这里一次算好：模板里直接调 player.artistLabel() 的话，
+  // 每次重渲染都会重走一遍 artistKey（繁简转换 + 正则归一），几千行时很可观
+  splitArtists(props.track.meta?.artist ?? '').map((p) => ({
+    ...p,
+    label: player.artistLabel(p.name),
+  })),
+)
 /** 没写出处信息时不给可点的假象 */
 const canArtist = computed(() => props.artistLink !== false && artistParts.value.length > 0)
 const canAlbum = computed(() => props.albumLink !== false && !!album.value)
@@ -118,7 +127,7 @@ function gotoAlbum() {
               title="前往歌手页"
               @click.stop="gotoArtist(p.name)"
             >
-              {{ player.artistLabel(p.name) }}
+              {{ p.label }}
             </button>
             <span v-else>{{ player.artistLabel(p.name) }}</span>
           </template>

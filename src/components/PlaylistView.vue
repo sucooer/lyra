@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePlayerStore } from '../stores/player'
-import { goHome, openNowPlaying } from '../lib/nav'
-import { fmtTime } from '../lib/track'
+import { goHome } from '../lib/nav'
 import PlaylistCover from './PlaylistCover.vue'
 import TrackRow from './TrackRow.vue'
+import NowPlayingHint from './NowPlayingHint.vue'
 
 const props = defineProps<{ id: string }>()
 const player = usePlayerStore()
@@ -46,11 +46,53 @@ function shuffleAll() {
   player.playCollection(ids.value, label.value, { shuffle: true })
 }
 
-function openInPlayer() {
-  if (player.currentTrack && ids.value.includes(player.currentTrack.id)) {
-    openNowPlaying()
-  }
-}
+/**
+ * 分批渲染：一次只建 CHUNK 行，滚到列表末尾附近再补一批。
+ *
+ * 曲库级歌单有 4000 首，一次性渲染实测要 4.4 秒、6.4 万个 DOM 节点，
+ * 点进去就是明显卡死；分批后首帧只有几十行，剩下的按需出现。
+ */
+const CHUNK = 60
+const shown = ref(CHUNK)
+const visibleTracks = computed(() => {
+  const all = collection.value?.tracks ?? []
+  // 小歌单直接全给：多渲染那点行数无关痛痒，也免得出现「60 / 62 首」这种别扭的提示
+  const n = all.length <= CHUNK * 2 ? all.length : Math.min(all.length, shown.value)
+  return all.slice(0, n)
+})
+
+/** 换歌单时回到第一批 */
+watch(
+  () => props.id,
+  () => (shown.value = CHUNK),
+)
+
+const sentinel = ref<HTMLElement | null>(null)
+let io: IntersectionObserver | null = null
+
+onMounted(() => {
+  io = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        shown.value = Math.min(ids.value.length, shown.value + CHUNK)
+      }
+    },
+    // 提前 800px 就开始补，正常滚动不会看到「白条」
+    { rootMargin: '800px' },
+  )
+  if (sentinel.value) io.observe(sentinel.value)
+})
+// 歌单内容是 v-if="collection" 渲染的，挂载时哨兵可能还不存在，等它出现再观察
+watch(sentinel, (el) => {
+  if (io && el) io.observe(el)
+})
+onBeforeUnmount(() => io?.disconnect())
+
+/** 本歌单是否有正在播放的曲目（走 Set，避免每次重渲染都扫一遍 ids） */
+const playingHere = computed(() => {
+  const cur = player.currentTrack
+  return !!cur && new Set(ids.value).has(cur.id)
+})
 </script>
 
 <template>
@@ -96,22 +138,22 @@ function openInPlayer() {
       </div>
     </div>
 
-    <!-- 曲目列表 -->
+    <!-- 曲目列表（分批渲染，见 visibleTracks） -->
     <div class="mt-7 divide-y divide-line border-y border-line">
-      <TrackRow v-for="t in collection.tracks" :key="t.id" :track="t" source="playlist" />
+      <TrackRow v-for="t in visibleTracks" :key="t.id" :track="t" source="playlist" />
     </div>
+    <!-- 哨兵：放在带边框的列表容器之外，免得 divide-y 给它多画一条线 -->
+    <div ref="sentinel"></div>
 
-    <!-- 播放中时给一个回到播放器的入口 -->
-    <button
-      v-if="player.currentTrack && ids.includes(player.currentTrack.id)"
-      class="mt-4 w-full text-[13px] text-music hover:opacity-75 transition"
-      @click="openInPlayer"
+    <!-- 播放中时给一个回到播放器的入口（单独组件：它每秒都在动，别拖累上面的列表） -->
+    <NowPlayingHint v-if="playingHere" class="mt-4" />
+
+    <div
+      v-if="visibleTracks.length < collection.tracks.length"
+      class="mt-3 text-center text-[12px] text-fg-subtle"
     >
-      正在播放「{{
-        player.currentTrack.meta?.title ||
-        player.currentTrack.url.split('/').pop()?.replace(/\.[a-z0-9]+$/i, '')
-      }}」· {{ fmtTime(player.currentTime) }} / {{ fmtTime(player.duration) }}
-    </button>
+      已显示 {{ visibleTracks.length }} / {{ collection.tracks.length }} 首 · 继续下滑加载
+    </div>
   </div>
 
   <div v-else class="px-6 py-16 text-center text-fg-subtle text-sm space-y-4">
