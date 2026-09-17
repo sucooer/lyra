@@ -27,6 +27,15 @@ import {
 } from '../lib/playlist'
 import { buildDaily, dateKey, parseDailyFile, DAILY_ID, type DailyPick } from '../lib/daily'
 import { parseEmbyFile, EMBY_META_URL } from '../lib/emby'
+import {
+  ARTISTS_URL,
+  parseArtistsFile,
+  findArtist,
+  findAlbumNote,
+  normName,
+  type ArtistsFile,
+  type ArtistInfo,
+} from '../lib/artists'
 
 export interface Track {
   /** 由 stableId(url) 得出，跨会话稳定；收藏/历史类功能靠它对齐同一首歌 */
@@ -47,6 +56,20 @@ export interface Track {
   lyricsLoaded: boolean
   loading: boolean
   error?: string
+}
+
+/** 曲库按「歌手 + 专辑」聚合出的一张专辑 */
+export interface AlbumGroup {
+  name: string
+  artist: string
+  /** 封面：优先曲库内嵌图，没有才用 Apple Music 的 */
+  cover?: string
+  year?: number
+  trackCount: number
+  /** Apple Music 的专辑推荐语 */
+  note?: string
+  /** Apple Music 专辑页 */
+  amUrl?: string
 }
 
 /** 正在拉取歌词的曲目 id，用于合并并发请求（非响应式数据，不必放进 state） */
@@ -95,6 +118,8 @@ export const usePlayerStore = defineStore('player', {
     context: [] as string[],
     /** 上下文名称，用于在界面上说明「正在播放哪个歌单」 */
     contextLabel: '',
+    /** 歌手简介 / Apple Music 专辑推荐语等补充资料（public/artists.json） */
+    artists: { generatedAt: '', artists: {} } as ArtistsFile,
     /** 电台封面的随机种子：每次点电台都换一张新封面 */
     radioSeed: 20260916,
   }),
@@ -320,6 +345,76 @@ export const usePlayerStore = defineStore('player', {
       this.playId(id)
     },
 
+    /** 歌手的补充资料（简介 / Apple Music 链接）；曲库里没有该歌手时为 undefined */
+    artistInfo(name: string): ArtistInfo | undefined {
+      return findArtist(this.artists, name)
+    },
+
+    /** 某位歌手在曲库里的全部曲目 */
+    artistTracks(name: string): Track[] {
+      const k = normName(name)
+      return this.tracks.filter((t) => normName(t.meta?.artist ?? '') === k)
+    },
+
+    /**
+     * 某位歌手在曲库里的专辑。
+     * 封面与年份优先用曲库自己的（内嵌图与 tag 更贴近实际文件），
+     * 缺了才退回 artists.json 里 Apple Music 那份。
+     */
+    artistAlbums(name: string): AlbumGroup[] {
+      const k = normName(name)
+      const info = this.artistInfo(name)
+      const groups = new Map<string, AlbumGroup>()
+
+      for (const t of this.tracks) {
+        if (normName(t.meta?.artist ?? '') !== k) continue
+        const album = (t.meta?.album ?? '').trim()
+        if (!album) continue
+        let g = groups.get(album)
+        if (!g) {
+          const am = findAlbumNote(info, album)
+          g = {
+            name: album,
+            artist: name,
+            cover: t.meta?.coverUrl ?? am?.cover,
+            year: t.meta?.year ?? am?.year,
+            trackCount: 0,
+            note: am?.note,
+            amUrl: am?.amUrl,
+          }
+          groups.set(album, g)
+        }
+        g.trackCount++
+        if (!g.cover && t.meta?.coverUrl) g.cover = t.meta.coverUrl
+        if (!g.year && t.meta?.year) g.year = t.meta.year
+      }
+
+      // 新专辑在前；都没年份的按名字排，保证顺序稳定
+      return [...groups.values()].sort((a, b) => {
+        if (a.year && b.year && a.year !== b.year) return b.year - a.year
+        if (a.year && !b.year) return -1
+        if (!a.year && b.year) return 1
+        return a.name.localeCompare(b.name, 'zh-Hans-CN')
+      })
+    },
+
+    /** 某张专辑的曲目：歌手与专辑名都按归一化比对，写法不同也能对上 */
+    albumTracks(artist: string, album: string): Track[] {
+      const ka = normName(artist)
+      const kl = normName(album)
+      return this.tracks.filter(
+        (t) => normName(t.meta?.artist ?? '') === ka && normName(t.meta?.album ?? '') === kl,
+      )
+    },
+
+    /** 一张专辑的封面：取该专辑第一首有封面的曲目，退回 Apple Music 的 */
+    albumCover(artist: string, album: string): string | undefined {
+      const tracks = this.albumTracks(artist, album)
+      const hit = tracks.find((t) => t.meta?.coverUrl)
+      if (hit?.meta?.coverUrl) return hit.meta.coverUrl
+      return findAlbumNote(this.artistInfo(artist), album)?.cover
+    },
+
     /**
      * 设定播放上下文（歌单/电台），顺带清掉「接下来播放」残留队列，
      * 否则上一张歌单排队的曲目会串到新歌单里。
@@ -487,13 +582,23 @@ export const usePlayerStore = defineStore('player', {
      */
     async restore() {
       try {
-        const [plResp, metaResp, listsResp, embyResp] = await Promise.all([
+        const [plResp, metaResp, listsResp, embyResp, artistsResp] = await Promise.all([
           fetch(PLAYLIST_URL, { cache: 'no-store' }),
           fetch(META_URL, { cache: 'no-store' }).catch(() => null),
           fetch(LISTS_URL, { cache: 'no-store' }).catch(() => null),
           fetch(EMBY_META_URL, { cache: 'no-store' }).catch(() => null),
+          fetch(ARTISTS_URL, { cache: 'no-store' }).catch(() => null),
         ])
         if (!plResp.ok) return
+
+        // 歌手简介这类补充资料：缺失只是页面少一块简介，不影响播放
+        if (artistsResp?.ok) {
+          try {
+            this.artists = parseArtistsFile(await artistsResp.json())
+          } catch {
+            /* 忽略 */
+          }
+        }
 
         let cached: Record<string, CachedMeta> = {}
         if (metaResp?.ok) {

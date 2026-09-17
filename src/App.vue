@@ -3,22 +3,40 @@ import { computed, onMounted } from 'vue'
 import { usePlayerStore } from './stores/player'
 import { setupShortcuts } from './lib/shortcuts'
 import { initTheme, cycleTheme, themeMode, resolvedDark, themeLabel } from './lib/theme'
-import { activePlaylistId, goHome, initNav } from './lib/nav'
+import { activePlaylistId, activeAlbum, activeView, goHome, initNav } from './lib/nav'
 import PlayerBar from './components/PlayerBar.vue'
 import PlayerBarWide from './components/PlayerBarWide.vue'
 import NowPlaying from './components/NowPlaying.vue'
 import Home from './components/Home.vue'
 import PlaylistView from './components/PlaylistView.vue'
+import ArtistView from './components/ArtistView.vue'
+import AlbumView from './components/AlbumView.vue'
 import TrackMenu from './components/TrackMenu.vue'
 
 const player = usePlayerStore()
+
+/** 子页面 = 歌单 / 歌手 / 专辑；首页不带 hash */
+const inSubPage = computed(() => activeView.value.kind !== 'home')
 
 const current = computed(() =>
   activePlaylistId.value
     ? (player.collections.find((c) => c.def.id === activePlaylistId.value) ?? null)
     : null,
 )
-const headerTitle = computed(() => (current.value ? current.value.def.title : '音乐'))
+
+/** 顶栏标题：歌单用歌单名，歌手页用歌手名，专辑页用专辑名（歌手在页面里单独一行） */
+const headerTitle = computed(() => {
+  switch (activeView.value.kind) {
+    case 'playlist':
+      return current.value?.def.title ?? '歌单'
+    case 'artist':
+      return activeView.value.key
+    case 'album':
+      return activeAlbum.value?.album ?? '专辑'
+    default:
+      return '音乐'
+  }
+})
 
 onMounted(() => {
   initNav()
@@ -37,7 +55,7 @@ onMounted(() => {
       class="shrink-0 flex items-center gap-2 px-4 sm:px-6 pt-5 pb-2 lg:absolute lg:inset-x-0 lg:top-0 lg:z-40 lg:h-14 lg:py-0 lg:px-10 topbar-glass"
     >
       <button
-        v-if="activePlaylistId"
+        v-if="inSubPage"
         class="w-9 h-9 -ml-1 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
         title="返回"
         @click="goHome"
@@ -84,6 +102,12 @@ onMounted(() => {
     <div class="relative flex-1 min-h-0">
       <main class="absolute inset-0 overflow-y-auto pb-[150px] lg:pt-14 lg:pb-[112px]">
         <PlaylistView v-if="activePlaylistId" :id="activePlaylistId" />
+        <ArtistView v-else-if="activeView.kind === 'artist'" :name="activeView.key" />
+        <AlbumView
+          v-else-if="activeAlbum"
+          :artist="activeAlbum.artist"
+          :album="activeAlbum.album"
+        />
         <Home v-else />
       </main>
       <PlayerBar />

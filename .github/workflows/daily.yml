@@ -54,6 +54,14 @@ jobs:
           EMBY_API_KEY: ${{ secrets.EMBY_API_KEY }}
         run: node scripts/gen-emby.mjs
 
+      # 歌手简介与 Apple Music 专辑推荐语。不需要密钥（维基百科公开），
+      # 但配了 LASTFM_API_KEY 会优先用它 —— CI 在境外，维基可达；
+      # 本地在国内通常连不上，脚本会自动跳过该站点而不是干等超时。
+      - name: 同步歌手资料
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+        run: node scripts/gen-artists.mjs
+
       - name: 生成 public/daily.json
         run: node scripts/gen-daily.mjs
 
@@ -62,7 +70,7 @@ jobs:
           # emby.json / emby-covers / emby-lyrics 一并提交：Emby 的新歌、新歌单、
           # 新封面与新歌词只有同步进仓库才会进下一次构建，也才会进入之后的选歌池。
           # 歌词是内嵌在音频里的，只能下头部解析，所以必须落库复用（见 gen-emby.mjs）。
-          git add public/daily.json public/emby.json public/emby-covers public/emby-lyrics
+          git add public/daily.json public/emby.json public/emby-covers public/emby-lyrics public/artists.json
           if git diff --cached --quiet; then
             echo "日期与曲目都和上次一样，跳过提交"
             exit 0

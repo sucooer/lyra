@@ -1,24 +1,60 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { usePlayerStore } from '../stores/player'
 
 /**
- * 页面级导航：首页 ⇄ 歌单详情 ⇄ 展开播放页。
+ * 页面级导航：首页 ⇄ 歌单详情 / 歌手页 / 专辑页 ⇄ 展开播放页。
  *
  * 关键点：每次「进入下一层」都往浏览器历史压一条记录（pushState），
  * 「返回」统一走 history.back()。这样移动端的侧滑返回、浏览器/系统返回键
  * 回到的都是上一层页面，而不会直接把整个站点退掉。
  *
- * 项目不引路由库，层级用 hash 表示（#/playlist/<id>），静态托管刷新也不会 404。
+ * 项目不引路由库，层级用 hash 表示（#/playlist/<id>、#/artist/<歌手>、
+ * #/album/<歌手>/<专辑>），静态托管刷新也不会 404。
  */
 
-export const activePlaylistId = ref<string | null>(null)
+export type ViewKind = 'home' | 'playlist' | 'artist' | 'album'
+
+/** 复合 key 的分隔符：专辑的归属歌手与专辑名可能都含斜杠，用不可见字符分隔最稳 */
+const SEP = '\u001f'
+
+export interface ViewRef {
+  kind: ViewKind
+  /** playlist = 歌单 id；artist = 歌手名；album = `歌手 + SEP + 专辑名` */
+  key: string
+}
+
+const HOME: ViewRef = { kind: 'home', key: '' }
+
+export const activeView = ref<ViewRef>({ ...HOME })
+
+/** 兼容旧写法：当前在歌单页时的歌单 id，其它页面为 null */
+export const activePlaylistId = computed(() =>
+  activeView.value.kind === 'playlist' ? activeView.value.key : null,
+)
+/** 当前歌手页的歌手名 */
+export const activeArtist = computed(() =>
+  activeView.value.kind === 'artist' ? activeView.value.key : null,
+)
+/** 当前专辑页的「歌手 + 专辑名」 */
+export const activeAlbum = computed(() => {
+  if (activeView.value.kind !== 'album') return null
+  const [artist, album] = activeView.value.key.split(SEP)
+  return { artist, album }
+})
+
+export function artistKey(name: string): string {
+  return name
+}
+export function albumKey(artist: string, album: string): string {
+  return `${artist}${SEP}${album}`
+}
 
 /** 挂在 history.state 上的标记：只有带 lyra 字段的条目才是我们自己压的 */
 interface LyraState {
   lyra: true
   /** 层深：0 = 首屏那条记录；>0 说明下面还有一条我们的记录可以退 */
   depth: number
-  playlist: string | null
+  view: ViewRef
   nowPlaying: boolean
 }
 
@@ -27,18 +63,31 @@ function stateOf(): LyraState | null {
   return s && s.lyra === true ? s : null
 }
 
-/** 去掉 hash 的当前地址：歌单页用 hash 表示，首页不带 hash */
+/** 去掉 hash 的当前地址：子页面用 hash 表示，首页不带 hash */
 function baseUrl(): string {
   return location.pathname + location.search
 }
 
-function urlFor(playlist: string | null): string {
-  return playlist ? `${baseUrl()}#/playlist/${encodeURIComponent(playlist)}` : baseUrl()
+function urlFor(v: ViewRef): string {
+  const base = baseUrl()
+  if (v.kind === 'playlist') return `${base}#/playlist/${encodeURIComponent(v.key)}`
+  if (v.kind === 'artist') return `${base}#/artist/${encodeURIComponent(v.key)}`
+  if (v.kind === 'album') {
+    const [artist, album] = v.key.split(SEP)
+    return `${base}#/album/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`
+  }
+  return base
 }
 
-function playlistFromUrl(): string | null {
-  const m = /^#\/playlist\/(.+)$/.exec(location.hash)
-  return m ? decodeURIComponent(m[1]) : null
+function viewFromUrl(): ViewRef {
+  const h = location.hash
+  let m = /^#\/playlist\/(.+)$/.exec(h)
+  if (m) return { kind: 'playlist', key: decodeURIComponent(m[1]) }
+  m = /^#\/artist\/(.+)$/.exec(h)
+  if (m) return { kind: 'artist', key: decodeURIComponent(m[1]) }
+  m = /^#\/album\/([^/]+)\/(.+)$/.exec(h)
+  if (m) return { kind: 'album', key: albumKey(decodeURIComponent(m[1]), decodeURIComponent(m[2])) }
+  return { ...HOME }
 }
 
 /** 正在执行 back()：防止连点两次返回把两层一起退掉，popstate 一到就解锁 */
@@ -53,34 +102,34 @@ function back() {
 }
 
 /** 压入一层 */
-function push(playlist: string | null, nowPlaying: boolean) {
+function push(view: ViewRef, nowPlaying: boolean) {
   const prev = stateOf()
   const state: LyraState = {
     lyra: true,
     depth: (prev?.depth ?? 0) + 1,
-    playlist,
+    view,
     nowPlaying,
   }
-  history.pushState(state, '', urlFor(playlist))
+  history.pushState(state, '', urlFor(view))
 }
 
 /** 就地改写当前记录（首屏、或没有上一层可退时的兜底） */
-function replace(playlist: string | null, nowPlaying: boolean) {
-  const state: LyraState = { lyra: true, depth: 0, playlist, nowPlaying }
-  history.replaceState(state, '', urlFor(playlist))
+function replace(view: ViewRef, nowPlaying: boolean) {
+  const state: LyraState = { lyra: true, depth: 0, view, nowPlaying }
+  history.replaceState(state, '', urlFor(view))
 }
 
 /** 历史状态 → 视图：popstate 与调用方共用这条唯一路径 */
 function apply(state: LyraState) {
-  activePlaylistId.value = state.playlist
+  activeView.value = state.view
   usePlayerStore().showNowPlaying = state.nowPlaying
 }
 
 /** 挂载时调用一次：首屏记录打标记，并接管 popstate（含侧滑返回） */
 export function initNav() {
-  const id = playlistFromUrl()
-  activePlaylistId.value = id
-  replace(id, false)
+  const v = viewFromUrl()
+  activeView.value = v
+  replace(v, false)
   window.addEventListener('popstate', () => {
     goingBack = false
     const s = stateOf()
@@ -91,17 +140,30 @@ export function initNav() {
     // 不是我们压的记录：多半是地址栏里手改 hash 这种「同文档跳转」——
     // 浏览器会新建一条 state 为 null 的记录，此时按 URL 反推视图并就地认领它，
     // 否则会出现「地址栏是歌单、页面还停在首页」的错位。
-    const id = playlistFromUrl()
-    replace(id, false)
-    activePlaylistId.value = id
+    const v = viewFromUrl()
+    replace(v, false)
+    activeView.value = v
     usePlayerStore().showNowPlaying = false
   })
 }
 
+/** 进入某一层；已在该层则什么都不做 */
+function open(view: ViewRef) {
+  if (activeView.value.kind === view.kind && activeView.value.key === view.key) return
+  push(view, usePlayerStore().showNowPlaying)
+  activeView.value = view
+}
+
 export function openPlaylist(id: string) {
-  if (activePlaylistId.value === id) return
-  push(id, usePlayerStore().showNowPlaying)
-  activePlaylistId.value = id
+  open({ kind: 'playlist', key: id })
+}
+
+export function openArtist(name: string) {
+  open({ kind: 'artist', key: name })
+}
+
+export function openAlbum(artist: string, album: string) {
+  open({ kind: 'album', key: albumKey(artist, album) })
 }
 
 export function goHome() {
@@ -111,15 +173,15 @@ export function goHome() {
     back()
     return
   }
-  // 深链直接打开的歌单页：没有上一层，就地改写成首页
-  replace(null, false)
-  activePlaylistId.value = null
+  // 深链直接打开的子页面：没有上一层，就地改写成首页
+  replace(HOME, false)
+  activeView.value = { ...HOME }
 }
 
 export function openNowPlaying() {
   const player = usePlayerStore()
   if (player.showNowPlaying) return
-  push(activePlaylistId.value, true)
+  push(activeView.value, true)
   player.showNowPlaying = true
 }
 

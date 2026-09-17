@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "meta": "node scripts/gen-meta.mjs",
     "emby": "node scripts/gen-emby.mjs",
+    "artists": "node scripts/gen-artists.mjs",
     "daily": "node scripts/gen-daily.mjs",
     "label": "node scripts/label-playlist.mjs"
   },

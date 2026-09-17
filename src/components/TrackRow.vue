@@ -2,13 +2,23 @@
 import { computed } from 'vue'
 import { usePlayerStore, type Track } from '../stores/player'
 import { useTrackMenu } from '../lib/trackMenu'
+import { openAlbum, openArtist } from '../lib/nav'
 import { trackTitle, fmtTime } from '../lib/track'
 
-const props = defineProps<{
-  track: Track
-  /** library = 资料库列表（点播会退出歌单上下文）；playlist = 歌单内（在歌单顺序里播） */
-  source?: 'library' | 'playlist'
-}>()
+const props = withDefaults(
+  defineProps<{
+    track: Track
+    /** library = 资料库列表（点播会退出歌单上下文）；playlist = 歌单内（在歌单顺序里播） */
+    source?: 'library' | 'playlist'
+    /** 歌手名是否可点进歌手页（歌手页自己要关掉，否则点了等于原地不动） */
+    artistLink?: boolean
+    /** 专辑名是否可点进专辑页 */
+    albumLink?: boolean
+  }>(),
+  // 必须给默认值：Vue 会把未传值的 Boolean prop 当成 false，
+  // 不写 default 的话所有不传这两个属性的地方都会变成「不可点」
+  { artistLink: true, albumLink: true },
+)
 
 const player = usePlayerStore()
 const menu = useTrackMenu()
@@ -20,6 +30,19 @@ function onRow() {
   if (active.value) player.togglePlay()
   else if (props.source === 'library') player.playFromLibrary(props.track.id)
   else player.playId(props.track.id)
+}
+
+const artist = computed(() => props.track.meta?.artist ?? '')
+const album = computed(() => props.track.meta?.album ?? '')
+/** 没写出处信息时不给可点的假象 */
+const canArtist = computed(() => props.artistLink !== false && !!artist.value)
+const canAlbum = computed(() => props.albumLink !== false && !!album.value)
+
+function gotoArtist() {
+  if (canArtist.value) openArtist(artist.value)
+}
+function gotoAlbum() {
+  if (canAlbum.value) openAlbum(artist.value, album.value)
 }
 </script>
 
@@ -69,8 +92,28 @@ function onRow() {
         </svg>
       </div>
       <div class="text-[13px] leading-snug text-fg-muted truncate mt-0.5">
-        {{ track.meta?.artist || (track.loading ? '解析中…' : '未知艺术家') }}
+        <button
+          v-if="canArtist"
+          class="max-w-full truncate text-left hover:text-fg hover:underline transition"
+          title="前往歌手页"
+          @click.stop="gotoArtist"
+        >
+          {{ artist }}
+        </button>
+        <template v-else>{{ artist || (track.loading ? '解析中…' : '未知艺术家') }}</template>
       </div>
+    </div>
+
+    <!-- 宽屏补上官方列表里的专辑列：Apple Music 的歌曲列表也是「标题 / 歌手+专辑 / 时长」 -->
+    <div class="hidden lg:block shrink-0 w-[26%] min-w-0 pr-4">
+      <button
+        v-if="canAlbum"
+        class="max-w-full block truncate text-[13px] leading-snug text-fg-muted text-left hover:text-fg hover:underline transition"
+        title="前往专辑页"
+        @click.stop="gotoAlbum"
+      >
+        {{ album }}
+      </button>
     </div>
 
     <!-- 宽屏补上官方列表里的时长列 -->
