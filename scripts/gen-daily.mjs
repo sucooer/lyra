@@ -21,9 +21,15 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// Node ≥22.18 能直接加载 .ts（只擦类型、不校验），所以这里可以复用前端那份规则
-import { buildDaily, dailySubtitle, dateKey } from '../src/lib/daily.ts'
-import { isEmbyStreamUrl } from '../src/lib/emby.ts'
+import { loadTs } from './load-ts.mjs'
+
+// 复用前端那份规则（buildDaily / isEmbyStreamUrl 都是浏览器与脚本共用的纯函数）。
+// 不能直接 `import '../src/lib/*.ts'`：Node 的类型擦除要 >= 22.18 才默认开启，
+// Cloudflare Pages 的构建镜像是 22.16，直接 import 会让构建挂掉。详见 load-ts.mjs。
+const { buildDaily, dailySubtitle, dateKey } = await loadTs(
+  new URL('../src/lib/daily.ts', import.meta.url),
+)
+const { isEmbyStreamUrl } = await loadTs(new URL('../src/lib/emby.ts', import.meta.url))
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PLAYLIST_PATH = resolve(ROOT, 'public/playlist.json')

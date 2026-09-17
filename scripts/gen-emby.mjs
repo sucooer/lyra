@@ -23,7 +23,14 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { embyPlaylistId, embyPlaylistSubtitle, embyStreamUrl, EMBY_COVER_DIR } from '../src/lib/emby.ts'
+import { loadTs } from './load-ts.mjs'
+
+// 与前端共用同一份约定。这里不能直接 `import '../src/lib/emby.ts'`：
+// Node 的类型擦除要 >= 22.18 才默认开启，而 Cloudflare Pages 的构建镜像是 22.16，
+// 直接 import 会让整条构建挂掉（ERR_UNKNOWN_FILE_EXTENSION）。详见 load-ts.mjs。
+const { embyPlaylistId, embyPlaylistSubtitle, embyStreamUrl, EMBY_COVER_DIR } = await loadTs(
+  new URL('../src/lib/emby.ts', import.meta.url),
+)
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const OUT = path.join(ROOT, 'public', 'emby.json')
