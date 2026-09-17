@@ -629,7 +629,13 @@ export const usePlayerStore = defineStore('player', {
       if (!this.audio) return
       // 钳制到有效区间，防止负值或超出时长导致浏览器行为异常
       const d = this.duration
-      this.audio.currentTime = d > 0 ? Math.min(Math.max(0, sec), d - 0.25) : Math.max(0, sec)
+      const t = d > 0 ? Math.min(Math.max(0, sec), d - 0.25) : Math.max(0, sec)
+      this.audio.currentTime = t
+      // 乐观更新：暂停态下远程流不会预取目标位置，`seeked` 可能几十秒都不来（实测 25s
+      // 仍未触发），界面就停在旧进度 —— 表现为「暂停时拖了没反应」。先按目标值更新，
+      // `seeked` 到了再用音频的真实值覆盖（播放态下两者一致，不会有跳动）。
+      this.currentTime = t
+      updatePositionState(this)
     },
 
     setVolume(v: number) {

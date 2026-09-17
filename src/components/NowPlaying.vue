@@ -5,34 +5,27 @@ import LyricsView from './LyricsView.vue'
 import { resolvedDark } from '../lib/theme'
 import { closeNowPlaying, openAlbum, openArtist } from '../lib/nav'
 import { splitArtists } from '../lib/artists'
+import { useScrubber } from '../lib/scrubber'
 
 const player = usePlayerStore()
 const showLyrics = ref(false)
 const bgColor = ref('rgb(30,30,32)')
 
-/** 拖动中的预览比例（null = 未在拖动）；松手才真正 seek */
-const dragRatio = ref<number | null>(null)
-
-function ratioFrom(e: PointerEvent): number {
-  const el = e.currentTarget as HTMLElement
-  const r = el.getBoundingClientRect()
-  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-}
-function onDragDown(e: PointerEvent) {
-  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  dragRatio.value = ratioFrom(e)
-}
-function onDragMove(e: PointerEvent) {
-  if (dragRatio.value !== null) dragRatio.value = ratioFrom(e)
-}
-function onDragUp(e: PointerEvent) {
-  if (dragRatio.value === null) return
-  player.seek(ratioFrom(e) * player.duration)
-  dragRatio.value = null
-}
-function onDragCancel() {
-  dragRatio.value = null
-}
+/**
+ * 进度滑轨与播放条共用同一份拖拽逻辑（封面视图与歌词视图都用它）。
+ *
+ * 关键：pointer 事件必须绑在**轨道元素本身**上，不能绑在包含时间戳/按钮的外层块上 ——
+ * 比例是按 `currentTarget` 的宽度算的，绑到外层就把左右两侧的空白、时间数字、播放按钮
+ * 都变成了热区：点最左端等于 seek 到 0、点播放按钮会边切歌边跳到那儿。
+ */
+const {
+  onDragDown,
+  onDragMove,
+  onDragUp,
+  onDragCancel,
+  shownPercent: shownProgress,
+  shownCurrent,
+} = useScrubber(player)
 
 /** 音量滑条：官方同样是一条粗圆角实心条，没有原生 range 的外观 */
 const volumeDrag = ref<number | null>(null)
@@ -55,13 +48,6 @@ function onVolMove(e: PointerEvent) {
 function onVolUp() {
   volumeDrag.value = null
 }
-
-const shownProgress = computed(() =>
-  dragRatio.value !== null ? dragRatio.value * 100 : progress.value,
-)
-const shownCurrent = computed(() =>
-  dragRatio.value !== null ? dragRatio.value * player.duration : player.currentTime,
-)
 
 /** 从封面提取主色调（canvas 平均色，Apple Music 风格背景） */
 async function extractColor(src: string) {
@@ -118,10 +104,6 @@ function gotoAlbum() {
   const first = artistParts.value[0]?.name
   if (first && canAlbum.value) openAlbum(first, album.value)
 }
-
-const progress = computed(() =>
-  player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
-)
 
 function fmt(sec: number): string {
   if (!sec || !isFinite(sec)) return '0:00'
@@ -235,9 +217,17 @@ function fmt(sec: number): string {
           </div>
         </div>
 
-        <!-- 进度（官方：粗圆角实心条，无圆点；支持点击与拖动，松手生效） -->
-        <div class="mt-6 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
-          <div class="relative h-4 flex items-center cursor-pointer">
+        <!-- 进度（官方：粗圆角实心条，无圆点；支持点击与拖动，松手生效）
+             拖拽事件绑在轨道容器上：绑到外层会把下面那行时间也变成热区，
+             点时间数字就会 seek —— 整行都能拖是 bug，不是便利。 -->
+        <div class="mt-6">
+          <div
+            class="relative h-4 flex items-center cursor-pointer touch-none select-none"
+            @pointerdown="onDragDown"
+            @pointermove="onDragMove"
+            @pointerup="onDragUp"
+            @pointercancel="onDragCancel"
+          >
             <div class="absolute inset-x-0 h-2 rounded-full bg-np-fill">
               <div class="h-full rounded-full bg-np-fg" :style="{ width: shownProgress + '%' }"></div>
             </div>
@@ -380,14 +370,25 @@ function fmt(sec: number): string {
       </div>
     </div>
 
-    <!-- 歌词视图（全屏滚动，底部保留进度条） -->
-    <div v-else class="relative z-10 flex-1 min-h-0 flex flex-col pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <!-- 歌词视图（全屏滚动，底部保留进度条）
+         底边距 2rem（原 0.75rem）：手机上有浏览器底栏时贴得太紧，往上抬一档 -->
+    <div v-else class="relative z-10 flex-1 min-h-0 flex flex-col pb-[calc(2rem+env(safe-area-inset-bottom))]">
       <LyricsView class="flex-1 min-h-0" />
-      <div class="px-6 md:px-14 pt-3 shrink-0 touch-none select-none" @pointerdown="onDragDown" @pointermove="onDragMove" @pointerup="onDragUp" @pointercancel="onDragCancel">
+      <div class="px-6 md:px-14 pt-3 shrink-0">
         <div class="flex items-center gap-3">
           <span class="text-xs text-np-muted tabular-nums w-10">{{ fmt(shownCurrent) }}</span>
-          <div class="flex-1 h-1 bg-np-fill rounded-full cursor-pointer">
-            <div class="h-full bg-np-fg rounded-full" :style="{ width: shownProgress + '%' }"></div>
+          <!-- h-4 只负责把 4px 的细条包出可点高度；水平方向就是条本身，
+               所以左右两段时间、播放按钮都不会误触发 seek（拖拽只在条上生效） -->
+          <div
+            class="flex-1 h-4 flex items-center cursor-pointer touch-none select-none"
+            @pointerdown="onDragDown"
+            @pointermove="onDragMove"
+            @pointerup="onDragUp"
+            @pointercancel="onDragCancel"
+          >
+            <div class="w-full h-1 bg-np-fill rounded-full">
+              <div class="h-full bg-np-fg rounded-full" :style="{ width: shownProgress + '%' }"></div>
+            </div>
           </div>
           <button class="text-np-fg hover:opacity-70 transition shrink-0" @click="player.togglePlay" title="播放/暂停">
             <svg v-if="!player.playing" viewBox="0 0 24 24" class="w-6 h-6 fill-current" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M6 4.5v15L19 12z"/></svg>
