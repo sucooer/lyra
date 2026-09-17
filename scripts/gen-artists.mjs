@@ -18,6 +18,11 @@
  *
  * 网络全失败也不影响构建：抓不到就沿用已有条目，实在没有就只留曲目聚合信息。
  *
+ * 「谁和谁是同一个人」由 src/lib/artists.ts 的 artistKey 决定，这里不自己写一套：
+ * 同一人的繁简写法（张韶涵 / 張韶涵）与末尾句点差异（S.E.N.S. / S.E.N.S）合成一条，
+ * 联名（「阿悄, 庄心妍 & 王麟」）拆成三位、各人都算上这首联名曲。
+ * 产出里的键是 artistKey，name 是该键下出现最多的写法。
+ *
  * 用法：
  *   pnpm artists             增量生成（30 天内查过且拿到内容的跳过）
  *   pnpm artists --force     全部重抓
@@ -30,7 +35,9 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { loadTs } from './load-ts.mjs'
 
-const { parseArtistsFile, normName } = await loadTs(new URL('../src/lib/artists.ts', import.meta.url))
+const { parseArtistsFile, normName, artistKey, splitArtists } = await loadTs(
+  new URL('../src/lib/artists.ts', import.meta.url),
+)
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const OUT = path.join(ROOT, 'public', 'artists.json')
@@ -364,7 +371,6 @@ async function wikiBio(name, lang) {
   if (hit) return hit
   const rest = await restBio(name, lang)
   if (rest) return rest
-  if (MULTI_ARTIST.test(name)) return { diag: `${lang} 联名不搜` }
   const found = await get(`${base}&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=5`, {
     as: 'json',
   })
@@ -436,15 +442,26 @@ async function readJson(p, fallback) {
  * 「群星」落到同名消歧义页，「Various Artists」被重定向到「Compilation album（合辑）」，
  * 页面上挂着这种"简介"比空着更糟。专辑数据照抓（Apple Music 上 Various Artists
  * 是真实存在的合辑艺人），只是不写简介。
+ * 集合里写的是 artistKey（全小写、无标点），比对时也用键。
  */
 const NOT_A_PERSON = new Set(['群星', 'variousartists', 'va', '未知艺术家', 'unknownartist'])
 
 /**
- * 多人联名（「阿悄 & 徐良」）：维基上没有对应条目，搜索兜底会命中其中某一位的
- * 个人条目，把单人简介安到组合头上，所以这类只做精确查询、不用搜索兜底。
+ * 曲库里「没写歌手」的占位名：连歌手条目都不必产生
+ * （群星 / Various Artists 是有专辑数据的真实条目，所以不在这里）。
  */
-const MULTI_ARTIST = /[&,，、]/
+const UNKNOWN_ARTIST = new Set(['未知艺术家'].map((n) => artistKey(n)))
 
+/**
+ * 汇总曲库里的歌手，一位歌手一条。
+ *
+ * 键用 artistKey：于是同一人的不同写法会合成一条（张韶涵 72 首 + 張韶涵 37 首 → 一条
+ * 109 首；S.E.N.S. 与 S.E.N.S 同理）；「阿悄, 庄心妍 & 王麟」这种联名则拆成三位，
+ * 每位都算上这首歌 —— 一个人的歌手页不该漏掉他参与的联名曲。
+ *
+ * 展示名取该键下**出现最多的写法**（splitArtists 已经统一成简体），
+ * 这样 72 首的「张韶涵」胜过 37 首的「張韶涵」，页面标题稳定。
+ */
 function collectArtists() {
   const emby = JSON.parse(readFileSync(path.join(ROOT, 'public', 'emby.json'), 'utf8'))
   const meta = JSON.parse(readFileSync(path.join(ROOT, 'public', 'meta.json'), 'utf8'))
@@ -452,58 +469,87 @@ function collectArtists() {
 
   const map = new Map()
   for (const t of all) {
-    const artist = (t.artist || '').trim()
-    if (!artist || artist === '未知艺术家') continue
-    let a = map.get(artist)
-    if (!a) {
-      a = { name: artist, trackCount: 0, albums: new Map() }
-      map.set(artist, a)
+    for (const part of splitArtists(t.artist || '')) {
+      const key = artistKey(part.name)
+      if (!key || UNKNOWN_ARTIST.has(key)) continue
+      let a = map.get(key)
+      if (!a) {
+        a = { key, name: part.name, labels: new Map(), trackCount: 0, albums: new Map() }
+        map.set(key, a)
+      }
+      a.labels.set(part.name, (a.labels.get(part.name) ?? 0) + 1)
+      a.trackCount++
+      const album = (t.album || '').trim()
+      if (!album) continue
+      let al = a.albums.get(album)
+      if (!al) {
+        al = { name: album, trackCount: 0, year: t.year ?? undefined, cover: t.cover ?? undefined }
+        a.albums.set(album, al)
+      }
+      al.trackCount++
+      if (!al.year && t.year) al.year = t.year
+      if (!al.cover && t.cover) al.cover = t.cover
     }
-    a.trackCount++
-    const album = (t.album || '').trim()
-    if (!album) continue
-    let al = a.albums.get(album)
-    if (!al) {
-      al = { name: album, trackCount: 0, year: t.year ?? undefined, cover: t.cover ?? undefined }
-      a.albums.set(album, al)
-    }
-    al.trackCount++
-    if (!al.year && t.year) al.year = t.year
-    if (!al.cover && t.cover) al.cover = t.cover
   }
-  return map
+
+  for (const a of map.values()) {
+    let best = a.name
+    let bestN = 0
+    for (const [label, n] of a.labels) {
+      if (n > bestN) {
+        best = label
+        bestN = n
+      }
+    }
+    a.name = best
+  }
+  return { artists: map, total: all.length }
 }
 
 // ---------- 2. 主流程 ----------
 
-const libArtists = collectArtists()
+const { artists: libArtists, total: libTrackCount } = collectArtists()
 const prevRaw = await readJson(OUT, null)
 const prev = parseArtistsFile(prevRaw)
+
+/**
+ * 老产物里的键可能还是异写（「容祖兒」「S.E.N.S.」「Various Artists」），
+ * 按新键直接查会查不到，已经抓到的简介与专辑就会被整批重抓。
+ * 这里再按「老键归一后相同」兜一层，让归一规则升级不丢数据。
+ */
+const prevByKey = new Map()
+for (const [oldKey, raw] of Object.entries(prevRaw?.artists ?? {})) {
+  const k = artistKey(oldKey) || artistKey(raw?.name ?? '')
+  if (k && !prevByKey.has(k)) prevByKey.set(k, raw)
+}
+/** 上一轮的条目（新的直接命中，老的走归一回溯） */
+const prevOf = (key) => prev.artists[key] ?? prevByKey.get(key)
+
+const now = Date.now()
 /** 上一次查这个歌手是什么时候（parseArtistsFile 不保留 checkedAt，从原始 JSON 取） */
-function ageOf(name) {
-  const at = prevRaw?.artists?.[name]?.checkedAt
+function ageOf(key) {
+  const at = prevOf(key)?.checkedAt
   return at ? (now - Date.parse(at)) / 86400000 : Infinity
 }
 /** 上一次抓简介用的是哪版规则（同样绕开 parseArtistsFile，从原始 JSON 取） */
-function bioVerOf(name) {
-  return prevRaw?.artists?.[name]?.bioVersion ?? 0
+function bioVerOf(key) {
+  return prevOf(key)?.bioVersion ?? 0
 }
 
-const now = Date.now()
 const target = [...libArtists.values()].filter((a) => {
-  const p = prev.artists[a.name]
+  const p = prevOf(a.key)
   if (force || !p) return true
   // 简介与专辑分别判断：已经有专辑数据的歌手如果因为「有内容」被整体跳过，
   // 那第一次没抓到简介就永远补不上了（在本地跑的时候必然抓不到维基百科）。
   // bioVersion 对不上说明抓取规则更新过，也要重抓一次。
   return (
-    !p.bio || !p.albums?.length || ageOf(a.name) > REFRESH_DAYS || bioVerOf(a.name) !== BIO_VERSION
+    !p.bio || !p.albums?.length || ageOf(a.key) > REFRESH_DAYS || bioVerOf(a.key) !== BIO_VERSION
   )
 })
 const todo = limit ? target.slice(0, limit) : target
 
 console.log(
-  `曲库 ${[...libArtists.values()].reduce((n, a) => n + a.trackCount, 0)} 首 / ${libArtists.size} 位歌手；` +
+  `曲库 ${libTrackCount} 首 / ${libArtists.size} 位歌手（联名曲两边都算）；` +
     `待处理 ${todo.length} 位${todo.length < target.length ? `（--limit ${limit}）` : ''}`,
 )
 if (!LASTFM_KEY) {
@@ -514,7 +560,7 @@ if (!LASTFM_KEY) {
 }
 
 const results = await mapPool(todo, JOBS, async (a) => {
-  const old = prev.artists[a.name]
+  const old = prevOf(a.key)
   // 从旧条目起手：这次不重抓的字段自然沿用旧值
   const info = {
     name: a.name,
@@ -528,13 +574,13 @@ const results = await mapPool(todo, JOBS, async (a) => {
     amUrl: old?.amUrl,
   }
   // 合辑占位名：上一轮可能已经撞到了消歧义页/无关重定向，继承下来的错误简介要主动清掉
-  if (NOT_A_PERSON.has(normName(a.name))) {
+  if (NOT_A_PERSON.has(a.key)) {
     info.bio = undefined
     info.bioSource = undefined
     info.bioUrl = undefined
   }
-  const wantAlbums = force || !info.albums?.length || ageOf(a.name) > REFRESH_DAYS
-  const wantBio = force || !info.bio || bioVerOf(a.name) !== BIO_VERSION
+  const wantAlbums = force || !info.albums?.length || ageOf(a.key) > REFRESH_DAYS
+  const wantBio = force || !info.bio || bioVerOf(a.key) !== BIO_VERSION
 
   if (wantAlbums) {
     const am = await appleArtistId(a.name)
@@ -572,25 +618,32 @@ const results = await mapPool(todo, JOBS, async (a) => {
   console.log(
     `  ${a.name.padEnd(18)} ${mark.padEnd(18)} 专辑 ${String(info.albums?.length ?? 0).padStart(2)} 张`,
   )
-  return info
+  return [a.key, info]
 })
 
-// 合并：新结果 + 旧条目里这次没动的
+// 合并：一律**按曲库里的歌手逐位重建**，于是产出的键集合与曲库一一对应。
+// 直接遍历旧文件的键是不行的：老产物里的异写键（「張韶涵」「郭靜」）会被当成
+// 「曲库里没这个人」而在清理时删掉 —— 而它们偏偏是这轮不用重抓（有简介、没过期）的那些，
+// 一删就是整条记录消失。改成按新键重建后，老键自然被改写到新键上。
+const freshByKey = new Map(results)
 const merged = {}
-for (const [name, info] of Object.entries(prev.artists)) merged[name] = { ...info }
-for (const info of results) {
-  merged[info.name] = { ...info, checkedAt: new Date().toISOString() }
-}
-// 曲库里已不存在的歌手不再保留
-for (const name of Object.keys(merged)) {
-  if (!libArtists.has(name)) delete merged[name]
+for (const a of libArtists.values()) {
+  const fresh = freshByKey.get(a.key)
+  // 没查的沿用上一轮（prevOf 会按归一键找回老键下的那条）。
+  // 注意用**原始 JSON** 里的那条，而不是 parseArtistsFile 的结果：
+  // 解析器只认自己声明的字段，会把 checkedAt / bioVersion 吃掉，
+  // 于是「这轮跳过的歌手下轮又被当成没查过」，整库反复重抓。
+  const hit = fresh ?? prevOf(a.key)
+  if (!hit) continue
+  merged[a.key] = { ...hit, name: a.name, trackCount: a.trackCount }
+  if (fresh) merged[a.key].checkedAt = new Date().toISOString()
 }
 
 const out = { generatedAt: new Date().toISOString(), artists: merged }
 
 if (dry) {
   console.log('\n--dry：不写文件。示例：')
-  console.log(JSON.stringify(results.slice(0, 2), null, 1).slice(0, 1200))
+  console.log(JSON.stringify(results.slice(0, 2).map(([, info]) => info), null, 1).slice(0, 1200))
 } else {
   await mkdir(path.dirname(OUT), { recursive: true })
   await writeFile(OUT, JSON.stringify(out))

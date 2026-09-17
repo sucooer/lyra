@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { usePlayerStore, type Track } from '../stores/player'
 import { useTrackMenu } from '../lib/trackMenu'
 import { openAlbum, openArtist } from '../lib/nav'
+import { splitArtists } from '../lib/artists'
 import { trackTitle, fmtTime } from '../lib/track'
 
 const props = withDefaults(
@@ -34,15 +35,22 @@ function onRow() {
 
 const artist = computed(() => props.track.meta?.artist ?? '')
 const album = computed(() => props.track.meta?.album ?? '')
+/**
+ * 一个 artist 字段里可能写着好几位歌手（「阿悄, 庄心妍 & 王麟」），
+ * 拆开后每人一个链接，各自能进自己的歌手页。
+ */
+const artistParts = computed(() => splitArtists(props.track.meta?.artist ?? ''))
 /** 没写出处信息时不给可点的假象 */
-const canArtist = computed(() => props.artistLink !== false && !!artist.value)
+const canArtist = computed(() => props.artistLink !== false && artistParts.value.length > 0)
 const canAlbum = computed(() => props.albumLink !== false && !!album.value)
 
-function gotoArtist() {
-  if (canArtist.value) openArtist(artist.value)
+function gotoArtist(name: string) {
+  if (canArtist.value) openArtist(name)
 }
 function gotoAlbum() {
-  if (canAlbum.value) openAlbum(artist.value, album.value)
+  // 专辑挂在首位歌手名下：联名专辑只出现在一个人的专辑列表里，免得同一张专辑重复出现
+  const first = artistParts.value[0]?.name
+  if (canAlbum.value && first) openAlbum(first, album.value)
 }
 </script>
 
@@ -92,14 +100,18 @@ function gotoAlbum() {
         </svg>
       </div>
       <div class="text-[13px] leading-snug text-fg-muted truncate mt-0.5">
-        <button
-          v-if="canArtist"
-          class="max-w-full truncate text-left hover:text-fg hover:underline transition"
-          title="前往歌手页"
-          @click.stop="gotoArtist"
-        >
-          {{ artist }}
-        </button>
+        <template v-if="canArtist">
+          <template v-for="(p, i) in artistParts" :key="i">
+            <span v-if="i">{{ p.sep }}</span>
+            <button
+              class="hover:text-fg hover:underline transition"
+              title="前往歌手页"
+              @click.stop="gotoArtist(p.name)"
+            >
+              {{ player.artistLabel(p.name) }}
+            </button>
+          </template>
+        </template>
         <template v-else>{{ artist || (track.loading ? '解析中…' : '未知艺术家') }}</template>
       </div>
     </div>

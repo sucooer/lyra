@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { usePlayerStore } from '../stores/player'
+import { artistKey } from './artists'
 
 /**
  * 页面级导航：首页 ⇄ 歌单详情 / 歌手页 / 专辑页 ⇄ 展开播放页。
@@ -42,11 +43,12 @@ export const activeAlbum = computed(() => {
   return { artist, album }
 })
 
-export function artistKey(name: string): string {
-  return name
-}
+/**
+ * 专辑 key 里的歌手部分也换成身份键：歌手名经过繁简归一，
+ * 老链接（#/artist/張韶涵）与新链接指向的是同一层，不会各开一页。
+ */
 export function albumKey(artist: string, album: string): string {
-  return `${artist}${SEP}${album}`
+  return `${artistKey(artist)}${SEP}${album}`
 }
 
 /** 挂在 history.state 上的标记：只有带 lyra 字段的条目才是我们自己压的 */
@@ -84,7 +86,8 @@ function viewFromUrl(): ViewRef {
   let m = /^#\/playlist\/(.+)$/.exec(h)
   if (m) return { kind: 'playlist', key: decodeURIComponent(m[1]) }
   m = /^#\/artist\/(.+)$/.exec(h)
-  if (m) return { kind: 'artist', key: decodeURIComponent(m[1]) }
+  // 地址栏里手写的老写法（張韶涵）也归一到合并后的键，否则会打开一个空页
+  if (m) return { kind: 'artist', key: artistKey(decodeURIComponent(m[1])) }
   m = /^#\/album\/([^/]+)\/(.+)$/.exec(h)
   if (m) return { kind: 'album', key: albumKey(decodeURIComponent(m[1]), decodeURIComponent(m[2])) }
   return { ...HOME }
@@ -159,7 +162,7 @@ export function openPlaylist(id: string) {
 }
 
 export function openArtist(name: string) {
-  open({ kind: 'artist', key: name })
+  open({ kind: 'artist', key: artistKey(name) })
 }
 
 export function openAlbum(artist: string, album: string) {

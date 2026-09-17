@@ -10,6 +10,7 @@
     "meta": "node scripts/gen-meta.mjs",
     "emby": "node scripts/gen-emby.mjs",
     "artists": "node scripts/gen-artists.mjs",
+    "t2s": "node scripts/gen-t2s.mjs",
     "daily": "node scripts/gen-daily.mjs",
     "label": "node scripts/label-playlist.mjs"
   },

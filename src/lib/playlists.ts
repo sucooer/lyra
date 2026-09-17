@@ -7,6 +7,8 @@
  * 别和 playlist.ts 搞混：那边管的是 playlist.json（曲库源文件），这边管歌单分组。
  */
 
+import { artistKey, trackArtistKeys } from './artists'
+
 export interface PlaylistDef {
   /** 唯一标识，同时用作封面生成的种子 */
   id: string
@@ -22,7 +24,7 @@ export interface PlaylistDef {
   urls?: string[]
   /** 精确匹配曲名 */
   titles?: string[]
-  /** 精确匹配歌手 */
+  /** 匹配歌手：按归一后的身份键比，繁简写法与联名都能对上（见 lib/artists.ts） */
   artists?: string[]
   /** 精确匹配专辑 */
   albums?: string[]
@@ -72,7 +74,9 @@ export function playlistMatches(def: PlaylistDef, t: Matchable): boolean {
   const m = t.meta
   if (!m) return false
   if (def.titles?.some((x) => eq(x, m.title ?? ''))) return true
-  if (def.artists?.some((x) => eq(x, m.artist ?? ''))) return true
+  // 歌手走身份键：规则里写「花澤香菜」也能命中标成「花泽香菜」的文件，联名歌曲两边都算
+  const keys = trackArtistKeys(m.artist ?? '')
+  if (def.artists?.some((x) => keys.includes(artistKey(x)))) return true
   if (def.albums?.some((x) => eq(x, m.album ?? ''))) return true
   return false
 }

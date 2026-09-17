@@ -11,6 +11,11 @@ const player = usePlayerStore()
 const info = computed(() => player.artistInfo(props.name))
 const tracks = computed(() => player.artistTracks(props.name))
 const albums = computed(() => player.artistAlbums(props.name))
+/**
+ * 标题用展示名，不用 URL 里的键：键是归一化产物（S.E.N.S. 的键是 sens），
+ * 而且同一个人可能有两种写法，展示时统一到出现最多的那个。
+ */
+const label = computed(() => player.artistLabel(props.name))
 /** 头像：优先用曲库里的封面，没有再退 Apple Music 的专辑图 */
 const portrait = computed(
   () => albums.value.find((a) => a.cover)?.cover ?? info.value?.albums?.[0]?.cover,
@@ -22,17 +27,17 @@ const ids = computed(() => tracks.value.map((t) => t.id))
 watch(
   ids,
   (v) => {
-    if (v.length) player.setContext(v, props.name)
+    if (v.length) player.setContext(v, label.value)
   },
   { immediate: true },
 )
 
 function playAll() {
   if (player.shuffle) player.shuffle = false
-  player.playCollection(ids.value, props.name, { shuffle: false })
+  player.playCollection(ids.value, label.value, { shuffle: false })
 }
 function shuffleAll() {
-  player.playCollection(ids.value, props.name, { shuffle: true })
+  player.playCollection(ids.value, label.value, { shuffle: true })
 }
 
 const totalTime = computed(() => tracks.value.reduce((n, t) => n + (t.meta?.duration ?? 0), 0))
@@ -76,7 +81,7 @@ const bioSourceLabel = computed(() => {
 
       <div class="min-w-0">
         <h2 class="mt-4 lg:mt-0 text-2xl sm:text-3xl lg:text-[40px] font-bold tracking-tight truncate">
-          {{ name }}
+          {{ label }}
         </h2>
         <div class="text-[13px] text-fg-subtle mt-0.5">
           {{ tracks.length }} 首<template v-if="albums.length"> · {{ albums.length }} 张专辑</template>

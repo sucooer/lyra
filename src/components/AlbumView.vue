@@ -69,12 +69,12 @@ function shuffleAll() {
         <h2 class="mt-4 lg:mt-0 text-2xl sm:text-3xl lg:text-[40px] font-bold tracking-tight">
           {{ album }}
         </h2>
-        <!-- 歌手名可点：回到歌手页 -->
+        <!-- 歌手名可点：回到歌手页（URL 里是归一键，展示要用展示名） -->
         <button
           class="text-[15px] text-music mt-1 hover:opacity-75 transition"
           @click="openArtist(artist)"
         >
-          {{ artist }}
+          {{ player.artistLabel(artist) }}
         </button>
         <div class="text-[13px] text-fg-subtle mt-0.5">
           {{ tracks.length }} 首<template v-if="year"> · {{ year }}</template>

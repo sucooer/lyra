@@ -33,6 +33,9 @@ import {
   findArtist,
   findAlbumNote,
   normName,
+  artistKey,
+  splitArtists,
+  trackArtistKeys,
   type ArtistsFile,
   type ArtistInfo,
 } from '../lib/artists'
@@ -172,6 +175,42 @@ export const usePlayerStore = defineStore('player', {
       const ids = state.context.length ? state.context : state.tracks.map((t) => t.id)
       if (!state.context.length) return ids
       return ids.filter((id) => state.tracks.some((t) => t.id === id))
+    },
+
+    /**
+     * 身份键 → 展示名：同一个人的各种写法里取**出现最多的那个**（并统一成简体）。
+     * 曲库里「张韶涵」72 首、「張韶涵」37 首，所以歌手页统一显示「张韶涵」。
+     * 键本身是归一化的产物（比如 S.E.N.S. 的键是 sens），不能当名字用，
+     * 所以展示名必须单独算这一层。
+     */
+    artistNames(state): Record<string, string> {
+      const counts = new Map<string, Map<string, number>>()
+      for (const t of state.tracks) {
+        for (const p of splitArtists(t.meta?.artist ?? '')) {
+          const k = artistKey(p.name)
+          if (!k) continue
+          let m = counts.get(k)
+          if (!m) {
+            m = new Map<string, number>()
+            counts.set(k, m)
+          }
+          m.set(p.name, (m.get(p.name) ?? 0) + 1)
+        }
+      }
+      const out: Record<string, string> = {}
+      for (const [k, m] of counts) {
+        let best = ''
+        let bestN = -1
+        // 票数相同时留下先出现的那个（Map 的遍历顺序就是首次出现的顺序）
+        for (const [name, n] of m) {
+          if (n > bestN) {
+            best = name
+            bestN = n
+          }
+        }
+        out[k] = best
+      }
+      return out
     },
   },
 
@@ -350,10 +389,20 @@ export const usePlayerStore = defineStore('player', {
       return findArtist(this.artists, name)
     },
 
-    /** 某位歌手在曲库里的全部曲目 */
+    /**
+     * 歌手的展示名。入参是身份键（URL 里那个），必要时也能喂原始写法。
+     * 退路依次是：曲库里出现最多的写法 → artists.json 里的名字 → 键本身（实在没有就显示键）
+     */
+    artistLabel(name: string): string {
+      const k = artistKey(name)
+      return this.artistNames[k] ?? this.artists.artists[k]?.name ?? name
+    },
+
+    /** 某位歌手在曲库里的全部曲目（联名的歌曲也算他的：阿悄 & 徐良 两边都能查到） */
     artistTracks(name: string): Track[] {
-      const k = normName(name)
-      return this.tracks.filter((t) => normName(t.meta?.artist ?? '') === k)
+      const k = artistKey(name)
+      if (!k) return []
+      return this.tracks.filter((t) => trackArtistKeys(t.meta?.artist ?? '').includes(k))
     },
 
     /**
@@ -362,12 +411,13 @@ export const usePlayerStore = defineStore('player', {
      * 缺了才退回 artists.json 里 Apple Music 那份。
      */
     artistAlbums(name: string): AlbumGroup[] {
-      const k = normName(name)
+      const k = artistKey(name)
       const info = this.artistInfo(name)
+      const artist = this.artistLabel(name)
       const groups = new Map<string, AlbumGroup>()
 
       for (const t of this.tracks) {
-        if (normName(t.meta?.artist ?? '') !== k) continue
+        if (!trackArtistKeys(t.meta?.artist ?? '').includes(k)) continue
         const album = (t.meta?.album ?? '').trim()
         if (!album) continue
         let g = groups.get(album)
@@ -375,7 +425,7 @@ export const usePlayerStore = defineStore('player', {
           const am = findAlbumNote(info, album)
           g = {
             name: album,
-            artist: name,
+            artist,
             cover: t.meta?.coverUrl ?? am?.cover,
             year: t.meta?.year ?? am?.year,
             trackCount: 0,
@@ -398,12 +448,14 @@ export const usePlayerStore = defineStore('player', {
       })
     },
 
-    /** 某张专辑的曲目：歌手与专辑名都按归一化比对，写法不同也能对上 */
+    /** 某张专辑的曲目：歌手按身份键比（繁简/联名都能对上），专辑名按归一化比 */
     albumTracks(artist: string, album: string): Track[] {
-      const ka = normName(artist)
+      const ka = artistKey(artist)
       const kl = normName(album)
       return this.tracks.filter(
-        (t) => normName(t.meta?.artist ?? '') === ka && normName(t.meta?.album ?? '') === kl,
+        (t) =>
+          trackArtistKeys(t.meta?.artist ?? '').includes(ka) &&
+          normName(t.meta?.album ?? '') === kl,
       )
     },
 

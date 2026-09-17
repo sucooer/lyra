@@ -30,7 +30,8 @@ const headerTitle = computed(() => {
     case 'playlist':
       return current.value?.def.title ?? '歌单'
     case 'artist':
-      return activeView.value.key
+      // 键是归一化产物（S.E.N.S. → sens），标题要用展示名
+      return player.artistLabel(activeView.value.key)
     case 'album':
       return activeAlbum.value?.album ?? '专辑'
     default:
