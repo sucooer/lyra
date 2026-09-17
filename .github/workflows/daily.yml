@@ -78,6 +78,10 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(daily): 每日推荐与 Emby 同步 $(date +%F)"
-          # 刚好撞上手动提交时先 rebase 再推，不然这一步会因非快进失败
-          git pull --rebase --autostash
+          # 先 rebase 再推，不然撞上别处的提交会因非快进失败。
+          # -X theirs 是必须的：这几个产物都是「同源快照、整体重写」，谁新谁对 ——
+          # 本次刚生成的内容一定不比远程旧，冲突时不必人工介入。
+          # 注意 rebase 语境下 theirs 指的是「正在被应用的那个提交」，也就是本次产物
+          # （与 merge 里的含义相反，别按直觉读）。
+          git pull --rebase --autostash -X theirs
           git push

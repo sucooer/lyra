@@ -287,6 +287,25 @@ function pickBio(j, name, lang) {
 }
 
 /**
+ * 一次维基查询里各候选被弃用的原因，压成一小段塞进日志。
+ * CI 日志是唯一的现场：没有它就只能看到「无简介」，分不清是真没条目、
+ * 撞了消歧义页，还是被限流挡了 —— 而这三者的处理方式完全不同。
+ */
+function whyWiki(j) {
+  const pages = Object.values(j?.query?.pages ?? {})
+  if (!pages.length) return '无返回'
+  return pages
+    .slice(0, 2)
+    .map((p) => {
+      if (p.missing !== undefined) return `缺:${p.title}`
+      if (p.pageprops?.disambiguation !== undefined) return `歧:${p.title}`
+      if (!p.extract) return `无摘要:${p.title}`
+      return `短:${p.title}`
+    })
+    .join('/')
+}
+
+/**
  * 维基百科导言。
  * 先按条目标题精确查（redirects=1 既能处理重定向，也能跨繁简，如 Bandari→班得瑞）；
  * 查不到再退回全文搜索 —— 曲库里不少歌手用的是舞台名、日文名或带符号的写法
@@ -295,14 +314,18 @@ function pickBio(j, name, lang) {
 async function wikiBio(name, lang) {
   const base =
     `https://${lang}.wikipedia.org/w/api.php?action=query&format=json` +
-    `&prop=extracts|pageprops&exintro=1&explaintext=1&redirects=1&ppprop=disambiguation`
+    // exlimit=max 不能省：prop=extracts 默认只给 1 个条目生成摘要，
+    // 搜索兜底一次返回 5 个候选时，等于只看得到其中一条，命中率忽高忽低。
+    `&prop=extracts|pageprops&exintro=1&explaintext=1&exlimit=max&redirects=1&ppprop=disambiguation`
   const exact = await get(`${base}&titles=${encodeURIComponent(name)}`, { as: 'json' })
   const hit = pickBio(exact, name, lang)
-  if (hit || MULTI_ARTIST.test(name)) return hit
+  if (hit) return hit
+  if (MULTI_ARTIST.test(name)) return { diag: `${lang} 联名不搜` }
   const found = await get(`${base}&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=5`, {
     as: 'json',
   })
-  return pickBio(found, name, lang)
+  const hit2 = pickBio(found, name, lang)
+  return hit2 ?? { diag: `${lang}(${whyWiki(exact)} → ${whyWiki(found)})` }
 }
 
 /**
@@ -321,20 +344,22 @@ function clipBio(s) {
 
 async function fetchBio(name) {
   if (NOT_A_PERSON.has(normName(name))) return null
+  const diag = []
   let r = null
   if (LASTFM_KEY) {
     r = (await lastfmBio(name, 'zh')) ?? (await lastfmBio(name, 'en'))
     if (r) r = { ...r, source: 'lastfm' }
+    else diag.push('lastfm 无')
   }
-  if (!r) {
-    const w = await wikiBio(name, 'zh')
-    if (w) r = { ...w, source: 'wikipedia-zh' }
+  for (const lang of ['zh', 'en']) {
+    if (r) break
+    const w = await wikiBio(name, lang)
+    if (w?.bio) r = { ...w, source: `wikipedia-${lang}` }
+    else if (w?.diag) diag.push(w.diag)
   }
-  if (!r) {
-    const e = await wikiBio(name, 'en')
-    if (e) r = { ...e, source: 'wikipedia-en' }
-  }
-  return r ? { ...r, bio: clipBio(r.bio) } : null
+  // 没抓到就把原因带回去，日志里能看出是「真没条目」还是「被拦」
+  if (!r) return { diag: diag.join(' ') }
+  return { ...r, bio: clipBio(r.bio) }
 }
 
 /** 并发池 */
@@ -476,16 +501,19 @@ const results = await mapPool(todo, JOBS, async (a) => {
     }
   }
 
+  let diag = ''
   if (wantBio) {
     const bio = await fetchBio(a.name)
-    if (bio) {
+    if (bio?.bio) {
       info.bio = bio.bio
       info.bioSource = bio.source
       info.bioUrl = bio.url
+    } else {
+      diag = bio?.diag ?? ''
     }
   }
 
-  const mark = info.bio ? `简介 ${info.bioSource ?? ''}` : '无简介'
+  const mark = info.bio ? `简介 ${info.bioSource ?? ''}` : `无简介${diag ? `（${diag}）` : ''}`
   console.log(
     `  ${a.name.padEnd(18)} ${mark.padEnd(18)} 专辑 ${String(info.albums?.length ?? 0).padStart(2)} 张`,
   )
