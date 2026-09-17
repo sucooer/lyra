@@ -47,6 +47,12 @@ export const EMBY_META_URL = '/emby.json'
  */
 export const EMBY_COVER_DIR = '/emby-covers'
 
+/**
+ * 歌词单独放一个目录，理由与封面相同：gen-meta 会清理 public/lyrics/ 里
+ * 「未被 meta.json 引用」的文件，而 Emby 的歌词只被 emby.json 引用。
+ */
+export const EMBY_LYRIC_DIR = '/emby-lyrics'
+
 /** Emby 条目 → 本站在播放器里使用的直链 */
 export function embyStreamUrl(id: string): string {
   return `${EMBY_STREAM_PATH}?id=${encodeURIComponent(id)}`

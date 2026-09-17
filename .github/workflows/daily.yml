@@ -59,9 +59,10 @@ jobs:
 
       - name: 提交并推送
         run: |
-          # emby.json / emby-covers 一并提交：Emby 的新歌、新歌单、新封面
-          # 只有同步进仓库才会进下一次构建，也才会进入之后的选歌池
-          git add public/daily.json public/emby.json public/emby-covers
+          # emby.json / emby-covers / emby-lyrics 一并提交：Emby 的新歌、新歌单、
+          # 新封面与新歌词只有同步进仓库才会进下一次构建，也才会进入之后的选歌池。
+          # 歌词是内嵌在音频里的，只能下头部解析，所以必须落库复用（见 gen-emby.mjs）。
+          git add public/daily.json public/emby.json public/emby-covers public/emby-lyrics
           if git diff --cached --quiet; then
             echo "日期与曲目都和上次一样，跳过提交"
             exit 0

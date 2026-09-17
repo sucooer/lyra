@@ -147,6 +147,12 @@ export interface CachedMeta {
   cover?: string | null
   /** 相对站点根的歌词文件路径，如 /lyrics/xxxx.json；null = 该曲目没有内嵌歌词 */
   lyricsUrl?: string | null
+  /**
+   * 是否真的去查过歌词（仅产物内部使用，前端不读）。
+   * lyricsUrl 为 null 有两种含义：「查过，没有」和「还没查过」，
+   * 没有这个标记就没法做增量，每轮同步都会把整库重新下载一遍。
+   */
+  lyricsChecked?: boolean
 }
 
 export function cachedToMeta(c: CachedMeta): TrackMeta {
