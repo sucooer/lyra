@@ -188,7 +188,24 @@ function fmt(sec: number): string {
             @click="player.shuffle = !player.shuffle"
             title="随机播放"
           >
-            <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+            <!-- 两条交叉的细线：左半段水平、中段 45° 交叉、右半段收回水平并入实心箭头。
+                 与循环键同为一套描边风格（stroke 而非 fill），尺寸按同一比例绘制。 -->
+            <svg
+              viewBox="0 0 24 24"
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <g transform="translate(1.49 4.48) scale(0.86)">
+                <path d="M1 3.75H5c1.2 0 1.2.65 2 1.5l7 7c.8.85.8 1.5 1.75 1.5h2.75" />
+                <path d="M1 13.75H5c1.2 0 1.2-.65 2-1.5l7-7c.8-.85.8-1.5 1.75-1.5h2.75" />
+                <path fill="currentColor" stroke="none" d="M18.5 0l5.8 3.75-5.8 3.75z" />
+                <path fill="currentColor" stroke="none" d="M18.5 10l5.8 3.75-5.8 3.75z" />
+              </g>
+            </svg>
           </button>
 
           <!-- ◀◀ 上一首：双三角 -->
@@ -235,8 +252,44 @@ function fmt(sec: number): string {
             @click="player.cycleRepeat"
             title="循环模式"
           >
-            <svg v-if="player.repeat !== 'one'" viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-            <svg v-else viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>
+            <!-- 圆角方框 + 两个箭头：左半边的框连着「向右」的箭头、右半边连着「向左」的箭头，
+                 两条各画一半，中间留出缺口（官方就是这种断开的环路写法） -->
+            <svg
+              v-if="player.repeat !== 'one'"
+              viewBox="0 0 24 24"
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <g transform="translate(2.76 4.48) scale(0.86)">
+                <path d="M1 8.75V4.75a1 1 0 0 1 1-1h10.5" />
+                <path d="M20.5 8.75v4a1 1 0 0 1-1 1H9" />
+                <path fill="currentColor" stroke="none" d="M17.5 3.75L12.5 0v7.5z" />
+                <path fill="currentColor" stroke="none" d="M4 13.75L9 10v7.5z" />
+              </g>
+            </svg>
+            <!-- 单曲循环：同一个框，中间补一个「1」（笔画比外框细一档，免得糊成一坨） -->
+            <svg
+              v-else
+              viewBox="0 0 24 24"
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <g transform="translate(2.76 4.48) scale(0.86)">
+                <path d="M1 8.75V4.75a1 1 0 0 1 1-1h10.5" />
+                <path d="M20.5 8.75v4a1 1 0 0 1-1 1H9" />
+                <path fill="currentColor" stroke="none" d="M17.5 3.75L12.5 0v7.5z" />
+                <path fill="currentColor" stroke="none" d="M4 13.75L9 10v7.5z" />
+                <path stroke-width="1.6" d="M9.9 7.5L10.9 6.3V11.2" />
+              </g>
+            </svg>
           </button>
         </div>
 
