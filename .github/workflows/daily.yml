@@ -1,6 +1,8 @@
 name: 每日推荐
 
 # 每天生成一份当天的「每日推荐」并提交，部署平台收到提交后重新构建。
+# 顺带同步 Emby 曲库与歌单（新歌、新歌单、新封面），前提是仓库里配了
+# EMBY_URL / EMBY_API_KEY 两个 secret —— 没配就跳过，只用已有快照。
 #
 # 时间：cron 只认 UTC，16:05 UTC = 北京 00:05 —— 错开整点是因为 GitHub 的
 # 定时任务在整点排队最严重，经常延迟十几分钟到一小时。
@@ -28,25 +30,45 @@ jobs:
         with:
           fetch-depth: 0 # 要 rebase，浅克隆下历史不全
 
-      # gen-daily.mjs 直接 import 了 src/lib/daily.ts（与前端共用同一份选歌规则），
-      # Node 的类型擦除要 ≥22.18 才默认开启，所以这里不能降版本
+      # gen-daily.mjs 通过 scripts/load-ts.mjs 用 esbuild 加载 src/lib/daily.ts
+      # （与前端共用同一份选歌规则），所以这里必须真的装依赖，不能只 setup-node。
+      # Node 选 22 是因为 load-ts 不依赖版本特性，但 esbuild 需要能装上。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # Emby 侧的新歌 / 新歌单靠这一步进仓库。没配 secret 就整步跳过，
+      # 沿用仓库里已有的 emby.json 快照（gen-emby.mjs 自己的行为一致）。
+      - name: 同步 Emby 曲库与歌单
+        if: ${{ secrets.EMBY_URL != '' && secrets.EMBY_API_KEY != '' }}
+        env:
+          EMBY_URL: ${{ secrets.EMBY_URL }}
+          EMBY_API_KEY: ${{ secrets.EMBY_API_KEY }}
+        run: node scripts/gen-emby.mjs
 
       - name: 生成 public/daily.json
         run: node scripts/gen-daily.mjs
 
       - name: 提交并推送
         run: |
-          git add public/daily.json
+          # emby.json / emby-covers 一并提交：Emby 的新歌、新歌单、新封面
+          # 只有同步进仓库才会进下一次构建，也才会进入之后的选歌池
+          git add public/daily.json public/emby.json public/emby-covers
           if git diff --cached --quiet; then
             echo "日期与曲目都和上次一样，跳过提交"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(daily): 每日推荐 $(date +%F)"
+          git commit -m "chore(daily): 每日推荐与 Emby 同步 $(date +%F)"
           # 刚好撞上手动提交时先 rebase 再推，不然这一步会因非快进失败
           git pull --rebase --autostash
           git push
