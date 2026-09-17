@@ -43,18 +43,27 @@ export function isRadio(def: PlaylistDef): boolean {
 }
 
 /**
+ * 歌单是否自带成员规则。没写任何规则 = 收录全部曲目，
+ * 和「只想改个标题」是两种完全不同的意图，所以合并时要能区分。
+ */
+export function hasOwnMembership(def: PlaylistDef): boolean {
+  return !!(
+    def.all ||
+    def.urls?.length ||
+    def.titles?.length ||
+    def.artists?.length ||
+    def.albums?.length ||
+    def.tags?.length
+  )
+}
+
+/**
  * 歌单是否收录某曲目：任一规则命中即算收录；未配置任何规则 = 收录全部。
  * tags 和 urls 一样不依赖音频元数据，所以在 meta 判空之前先比。
  */
 export function playlistMatches(def: PlaylistDef, t: Matchable): boolean {
   if (def.all) return true
-  const hasFilter =
-    !!def.urls?.length ||
-    !!def.titles?.length ||
-    !!def.artists?.length ||
-    !!def.albums?.length ||
-    !!def.tags?.length
-  if (!hasFilter) return true
+  if (!hasOwnMembership(def)) return true
 
   const eq = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
   if (def.urls?.some((x) => eq(x, t.url))) return true
@@ -66,6 +75,34 @@ export function playlistMatches(def: PlaylistDef, t: Matchable): boolean {
   if (def.artists?.some((x) => eq(x, m.artist ?? ''))) return true
   if (def.albums?.some((x) => eq(x, m.album ?? ''))) return true
   return false
+}
+
+/**
+ * 把外部来源（Emby）的歌单合进手工歌单。
+ *
+ * 手工的一律排在前面，且同 id 时手工的说了算 —— 手写文件是用户的显式意志，
+ * 不能被同步产物盖掉（这也正是「给某个 Emby 歌单改标题/换封面」的入口）。
+ *
+ * 但「说了算」不等于整体接管：手工那条如果没写任何成员规则，成员就沿用外部的，
+ * 只覆盖它真正写过的字段。否则为了改个标题也得把十几条直链重抄一遍，
+ * 而漏抄一条只表现为「歌单莫名少一首」，基本查不出来。
+ * 想完全自己定成员，把 urls（或 artists 等）写上即可，那时就不再继承。
+ */
+export function mergePlaylists(local: PlaylistDef[], remote: PlaylistDef[]): PlaylistDef[] {
+  const byId = new Map(local.map((d) => [d.id, d]))
+  const merged = local.map((l) => {
+    const r = remote.find((x) => x.id === l.id)
+    if (!r || hasOwnMembership(l) || l.type === 'radio') return l
+    return { ...r, ...definedOnly(l) }
+  })
+  return [...merged, ...remote.filter((r) => !byId.has(r.id))]
+}
+
+/** 只取有值的字段：正常化后的 def 里可选项是 undefined，展开会把继承来的成员抹掉 */
+function definedOnly(def: PlaylistDef): Partial<PlaylistDef> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(def)) if (v !== undefined) out[k] = v
+  return out as Partial<PlaylistDef>
 }
 
 /**

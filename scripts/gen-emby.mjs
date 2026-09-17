@@ -23,7 +23,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { embyStreamUrl, EMBY_COVER_DIR } from '../src/lib/emby.ts'
+import { embyPlaylistId, embyPlaylistSubtitle, embyStreamUrl, EMBY_COVER_DIR } from '../src/lib/emby.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const OUT = path.join(ROOT, 'public', 'emby.json')
@@ -170,6 +170,53 @@ async function mapPool(items, size, fn) {
   return out
 }
 
+/**
+ * 取 Emby 里现成的歌单。
+ *
+ * 只收「条目 id 都在本次曲库里」的歌单条目：Emby 歌单里可能躺着已被删掉或已被移出
+ * 音乐库的条目，那种 url 在本站曲库里没有对应曲目，留着只会让歌单显示得比实际短。
+ * 这类条目按缺失计数并打出来，而不是静默丢弃。
+ *
+ * 封面不生成：Emby 给歌单的缩略图本身就是「成员专辑封面的 2×2 拼贴」，
+ * 而前端 PlaylistCover 对没有 cover 的歌单做的正是同一件事（还能按专辑去重），
+ * 存下来等于多一份重复图片。真想要自定义封面时，在 playlists.json 里手写同 id
+ * 的条目即可覆盖（见 store 里的合并规则）。
+ */
+async function fetchPlaylists(uid, trackUrls) {
+  const list = await api(`/Users/${uid}/Items`, '&Recursive=true&IncludeItemTypes=Playlist')
+  const out = []
+  for (const pl of list.Items ?? []) {
+    const items = await api(`/Playlists/${pl.Id}/Items`, '&Limit=2000')
+    const urls = []
+    let seconds = 0
+    let missing = 0
+    for (const it of items.Items ?? []) {
+      const u = embyStreamUrl(String(it.Id))
+      if (!trackUrls.has(u)) {
+        missing++
+        continue
+      }
+      if (urls.includes(u)) continue
+      urls.push(u)
+      seconds += (it.RunTimeTicks ?? 0) / 1e7
+    }
+    if (urls.length === 0) {
+      console.log(`  ! 歌单「${pl.Name}」没有可用条目，跳过`)
+      continue
+    }
+    console.log(
+      `  歌单「${pl.Name}」：${urls.length} 首${missing ? `（另有 ${missing} 首不在曲库里，已略过）` : ''}`,
+    )
+    out.push({
+      id: embyPlaylistId(String(pl.Id)),
+      title: pl.Name,
+      subtitle: embyPlaylistSubtitle(urls.length, seconds),
+      urls,
+    })
+  }
+  return out
+}
+
 async function main() {
   if (!BASE || !KEY) {
     console.log('未配置 EMBY_URL / EMBY_API_KEY，跳过 Emby 同步（沿用仓库里已有的 emby.json）')
@@ -249,7 +296,11 @@ async function main() {
     }
   }
 
-  const fresh = { generatedAt: new Date().toISOString(), tracks }
+  console.log('Emby 歌单：')
+  const playlists = await fetchPlaylists(uid, new Set(Object.keys(tracks)))
+  if (playlists.length === 0) console.log('  （这台 Emby 上没有可用歌单）')
+
+  const fresh = { generatedAt: new Date().toISOString(), tracks, playlists }
   const body = JSON.stringify(fresh, null, 0) + '\n'
 
   // 内容没变就不重写：generatedAt 每次都不同，不能拿整个文件比对
@@ -257,14 +308,16 @@ async function main() {
   if (existsSync(OUT)) {
     try {
       const old = JSON.parse(await readFile(OUT, 'utf8'))
-      same = JSON.stringify(old.tracks) === JSON.stringify(tracks)
+      same =
+        JSON.stringify(old.tracks) === JSON.stringify(tracks) &&
+        JSON.stringify(old.playlists ?? []) === JSON.stringify(playlists)
     } catch {
       /* 旧文件坏了，直接覆盖 */
     }
   }
 
   console.log('')
-  console.log(`曲目 ${Object.keys(tracks).length} 首 | 缺专辑信息 ${noAlbum} 首（已按目录名兜底）| 缺封面 ${noCover} 首`)
+  console.log(`曲目 ${Object.keys(tracks).length} 首 | 缺专辑信息 ${noAlbum} 首（已按目录名兜底）| 缺封面 ${noCover} 首 | 歌单 ${playlists.length} 个`)
   const samples = picked.slice(0, 3)
   for (const it of samples) {
     const t = tracks[embyStreamUrl(String(it.Id))]

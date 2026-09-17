@@ -9,14 +9,14 @@
  *
  * 轮换规则：把曲库按直链哈希排成一个固定顺序，第 n 天取从 (n × 每天首数) 开始的连续一段。
  * 不用「随机抽」是因为随机会隔三差五撞上前几天抽过的，而首尾相接的轮换能让相邻两天
- * 基本不重样（曲库 16 首、每天 12 首时，第二天只有 8 首与前一天重合）。
+ * 基本不重样（曲库 923 首、每天 30 首时，轮到第 31 天才开始重复）。
  */
 
 /** 歌单 id：会出现在地址栏 #/playlist/daily，改动等于换歌单身份 */
 export const DAILY_ID = 'daily'
 export const DAILY_TITLE = '每日推荐'
-/** 每天的首数上限 */
-export const DAILY_MAX = 12
+/** 每天的首数上限；曲库不够时按一半取（见 dailySize） */
+export const DAILY_MAX = 30
 
 /** 日期键：本地时区的 YYYY-MM-DD。用本地而不是 UTC，否则东八区早上 8 点前会算成昨天 */
 export function dateKey(d: Date = new Date()): string {
@@ -72,9 +72,11 @@ function shuffle<T>(arr: T[], seed: number): T[] {
 }
 
 /**
- * 当天的首数：默认 12 首，但不超过曲库的一半。
- * 「每日推荐」的意义在于每天有新鲜感，如果一次推掉大半个曲库（16 首推 12 首），
- * 第二天只能换出 4 首新的；按一半取，轮换段刚好首尾相接，天天都是全新的一半。
+ * 当天的首数：默认 30 首，但不超过曲库的一半。
+ *
+ * 上限是给「小曲库」留的：曲库只有 16 首时一次推 16 首，第二天还是这 16 首，
+ * 「每日」就没意义了。取一半能让轮换段首尾相接，天天都是全新的一半。
+ * 曲库超过 60 首后这个限制就够不着了，固定按 DAILY_MAX 取。
  */
 export function dailySize(total: number, max: number = DAILY_MAX): number {
   if (total <= 0) return 0
@@ -100,7 +102,7 @@ export function pickDaily(urls: string[], date: string = dateKey(), size?: numbe
   return shuffle(picked, day)
 }
 
-/** 卡片副标题：9月17日 · 12 首 · 每天更新 */
+/** 卡片副标题：9月17日 · 30 首 · 每天更新 */
 export function dailySubtitle(date: string, count: number): string {
   const [, m, d] = date.split('-').map(Number)
   return `${m}月${d}日 · ${count} 首 · 每天更新`
@@ -127,6 +129,19 @@ export function buildDaily(urls: string[], date: string = dateKey(), size?: numb
 }
 
 /**
+ * daily.json 里的直链得能直接喂给 <audio>。
+ *
+ * 早先曲库只有图床的绝对地址，所以这里只认 http(s)；Emby 曲目用的是站内相对路径
+ * （/api/emby/stream?id=…），只认绝对地址会把它们整批滤掉 —— 实测过：923 首的曲库
+ * 取 30 首，读文件只剩 1 首（那条手工曲目），而现算路径是对的，两边就不一致了。
+ *
+ * 相对路径必须是「单个前导斜杠」：//evil.com 是协议相对地址，会被解析成外域，不能放行。
+ */
+function isPlayableUrl(u: string): boolean {
+  return /^https?:\/\//i.test(u) || /^\/(?!\/)/.test(u)
+}
+
+/**
  * 校验并归一化 public/daily.json 的内容。
  * 手写或脚本生成的都从这里过一遍；结构不对（缺 urls、日期不是 YYYY-MM-DD）返回 null，
  * 由调用方决定退回现算，而不是把半个对象塞进界面。
@@ -137,7 +152,7 @@ export function parseDailyFile(raw: unknown): DailyPick | null {
   const date = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : null
   if (!date) return null
   const urls = Array.isArray(o.urls)
-    ? o.urls.filter((u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u))
+    ? o.urls.filter((u): u is string => typeof u === 'string' && isPlayableUrl(u))
     : []
   if (urls.length === 0) return null
   const title = typeof o.title === 'string' && o.title.trim() ? o.title.trim() : DAILY_TITLE

@@ -15,6 +15,7 @@ import {
   normalizePlaylists,
   playlistMatches,
   orderByUrls,
+  mergePlaylists,
   isRadio,
   type PlaylistDef,
 } from '../lib/playlists'
@@ -88,7 +89,7 @@ export const usePlayerStore = defineStore('player', {
     upNext: [] as string[],
     audio: null as HTMLAudioElement | null,
 
-    /** public/playlists.json 里定义的歌单与电台 */
+    /** 歌单与电台：手工的来自 public/playlists.json，Emby 的来自 public/emby.json */
     playlists: [] as PlaylistDef[],
     /** 播放上下文：当前歌单/电台的曲目 id 顺序；空数组 = 整个资料库 */
     context: [] as string[],
@@ -510,11 +511,13 @@ export const usePlayerStore = defineStore('player', {
          * 产物缺失或损坏时整个跳过——页面退化成只有手写曲库，不会报错。
          */
         let embyUrls: string[] = []
+        let embyLists: PlaylistDef[] = []
         if (embyResp?.ok) {
           try {
             const emby = parseEmbyFile(await embyResp.json())
-            embyUrls = Object.keys(emby)
-            cached = { ...cached, ...emby }
+            embyUrls = Object.keys(emby.tracks)
+            embyLists = emby.playlists
+            cached = { ...cached, ...emby.tracks }
           } catch {
             /* 忽略 */
           }
@@ -536,6 +539,11 @@ export const usePlayerStore = defineStore('player', {
             /* playlists.json 损坏则只显示资料库列表 */
           }
         }
+        /**
+         * Emby 里现成的歌单接在手工歌单之后（合并规则见 lib/playlists.ts 的 mergePlaylists）：
+         * 手工的在前、同 id 时手工的胜出，且没写成员规则的手工条目会继承 Emby 的曲目名单。
+         */
+        this.playlists = mergePlaylists(this.playlists, embyLists)
         // 放在歌单之后：它会把自己插到列表最前面
         await this.loadDaily()
       } catch {
