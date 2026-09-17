@@ -38,7 +38,21 @@ const REFRESH_DAYS = 30
 /** 单个请求超时：网络不通时别把构建拖死 */
 const TIMEOUT = 12000
 /** 并发：抓的都是第三方站点，别开太高 */
-const JOBS = 4
+const JOBS = 2
+/**
+ * 请求 UA 必须合规：维基媒体基金会的 UA 政策要求「客户端名/版本 (联系方式)」，
+ * 缺联系方式、或冒充浏览器（Mozilla/5.0 …）都会被边缘节点直接 403 —— 且是毫秒级返回，
+ * 表现成「51 位歌手一秒跑完、全无简介」，很容易误判成网络不通。
+ */
+const UA = 'lyra-metadata/1.0 (https://github.com/sucooer/lyra)'
+/** 同一主机的两次请求至少隔这么久；顺带压一压被第三方风控（406）的概率 */
+const MIN_GAP = 250
+const lastAt = new Map()
+async function throttle(host) {
+  const wait = (lastAt.get(host) ?? 0) + MIN_GAP - Date.now()
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+  lastAt.set(host, Date.now())
+}
 
 const argv = process.argv.slice(2)
 const dry = argv.includes('--dry')
@@ -66,6 +80,14 @@ const LASTFM_KEY = env.LASTFM_API_KEY || ''
 /** 一次超时就说明这台机器到不了该主机，后续直接跳过，省下 50 次干等 */
 const hostDown = new Set()
 
+/** 同一台主机只报一次失败原因，避免 51 行刷屏 */
+const reported = new Set()
+function noteFail(host, msg) {
+  if (reported.has(host)) return
+  reported.add(host)
+  console.log(`  （${host}：${msg}）`)
+}
+
 async function get(url, { as = 'text', timeout = TIMEOUT } = {}) {
   let host
   try {
@@ -74,12 +96,17 @@ async function get(url, { as = 'text', timeout = TIMEOUT } = {}) {
     return null
   }
   if (hostDown.has(host)) return null
+  await throttle(host)
   try {
     const r = await fetch(url, {
       signal: AbortSignal.timeout(timeout),
-      headers: { 'user-agent': 'Mozilla/5.0 (lyra metadata builder)' },
+      // 维基百科会按 UA 限流，缺 UA 或 UA 不像样的时候直接 403
+      headers: { 'user-agent': UA, accept: as === 'json' ? 'application/json' : 'text/html' },
     })
-    if (!r.ok) return null
+    if (!r.ok) {
+      noteFail(host, `HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 80)}`)
+      return null
+    }
     return as === 'json' ? await r.json() : await r.text()
   } catch (e) {
     // 超时 / 连不上：整台主机拉黑，本机在国内访问维基百科就是这种情况
@@ -228,7 +255,7 @@ async function lastfmBio(name, lang) {
 /** 维基百科导言：redirects=1 能把「Bandari」带到「班得瑞」 */
 async function wikiBio(name, lang) {
   const j = await get(
-    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&redirects=1&origin=*&titles=${encodeURIComponent(name)}`,
+    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&redirects=1&titles=${encodeURIComponent(name)}`,
     { as: 'json' },
   )
   const pages = j?.query?.pages ?? {}
@@ -245,18 +272,35 @@ async function wikiBio(name, lang) {
   return null
 }
 
+/**
+ * 简介长度上限：中文维基的导言动辄几千字（周杰伦那篇近 3000），
+ * 51 位全量留存会把 artists.json 撑得很大，页面上也是要折叠起来看的。
+ * 按句末截断，不留半句话。
+ */
+const BIO_MAX = 1200
+function clipBio(s) {
+  const t = String(s).trim()
+  if (t.length <= BIO_MAX) return t
+  const head = t.slice(0, BIO_MAX)
+  const cut = Math.max(head.lastIndexOf('。'), head.lastIndexOf('\n'), head.lastIndexOf('. '))
+  return `${(cut > BIO_MAX * 0.5 ? head.slice(0, cut + 1) : head).trim()}…`
+}
+
 async function fetchBio(name) {
+  let r = null
   if (LASTFM_KEY) {
-    const r = await lastfmBio(name, 'zh')
-    if (r) return { ...r, source: 'lastfm' }
-    const r2 = await lastfmBio(name, 'en')
-    if (r2) return { ...r2, source: 'lastfm' }
+    r = (await lastfmBio(name, 'zh')) ?? (await lastfmBio(name, 'en'))
+    if (r) r = { ...r, source: 'lastfm' }
   }
-  const w = await wikiBio(name, 'zh')
-  if (w) return { ...w, source: 'wikipedia-zh' }
-  const e = await wikiBio(name, 'en')
-  if (e) return { ...e, source: 'wikipedia-en' }
-  return null
+  if (!r) {
+    const w = await wikiBio(name, 'zh')
+    if (w) r = { ...w, source: 'wikipedia-zh' }
+  }
+  if (!r) {
+    const e = await wikiBio(name, 'en')
+    if (e) r = { ...e, source: 'wikipedia-en' }
+  }
+  return r ? { ...r, bio: clipBio(r.bio) } : null
 }
 
 /** 并发池 */
@@ -338,7 +382,12 @@ console.log(
   `曲库 ${[...libArtists.values()].reduce((n, a) => n + a.trackCount, 0)} 首 / ${libArtists.size} 位歌手；` +
     `待处理 ${todo.length} 位${todo.length < target.length ? `（--limit ${limit}）` : ''}`,
 )
-if (!LASTFM_KEY) console.log('LASTFM_API_KEY 未配置：简介将走维基百科（国内网络通常连不上）')
+if (!LASTFM_KEY) {
+  console.log(
+    'LASTFM_API_KEY 未配置：简介改走维基百科。国内网络到不了 wikipedia.org（本机跑必然拿不到），' +
+      'CI 上可以；想在本机补简介就配一个 Last.fm key（免费申请）。',
+  )
+}
 
 const results = await mapPool(todo, JOBS, async (a) => {
   const old = prev.artists[a.name]
