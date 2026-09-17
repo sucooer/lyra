@@ -308,6 +308,8 @@ function pickBio(j, name, lang) {
  * 撞了消歧义页，还是被限流挡了 —— 而这三者的处理方式完全不同。
  */
 function whyWiki(j) {
+  // API 自己报错时 query 是空的，只看「无返回」会误判成网络问题
+  if (j?.error) return `API错误:${j.error.code ?? '?'}`
   const pages = Object.values(j?.query?.pages ?? {})
   if (!pages.length) return '无返回'
   return pages
@@ -352,9 +354,11 @@ async function wikiBio(name, lang) {
     // exlimit=max 不能省：prop=extracts 默认只给 1 个条目生成摘要，
     // 搜索兜底一次返回 5 个候选时，等于只看得到其中一条，命中率忽高忽低。
     '&prop=extracts|pageprops&exintro=1&explaintext=1&exlimit=max&redirects=1&ppprop=disambiguation' +
-    // zh 维基加变体转换：曲库写简体，条目名却常是繁体（周传雄 → 周傳雄），
-    // 不转换标题就对不上，正确的条目会被整条丢掉；顺带让简介也统一成简体。
-    (lang === 'zh' ? '&variant=zh-cn&converttitles=1' : '')
+    // zh 维基加变体转换，让简介正文统一成简体（曲库是简体）。
+    // 注意别顺手加 converttitles：它会把请求的标题也做转换，实测会让
+    // 「周传雄」这类只有繁体条目的名字整段查不到东西（query 为空）。
+    // 标题转不了没关系，条目是否对口改由正文开头判断（见 pickBio）。
+    (lang === 'zh' ? '&variant=zh-cn' : '')
   const exact = await get(`${base}&titles=${encodeURIComponent(name)}`, { as: 'json' })
   const hit = pickBio(exact, name, lang)
   if (hit) return hit
