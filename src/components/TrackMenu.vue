@@ -26,7 +26,7 @@ const lastIcon = 'M3 6h13v2H3V6zm0 5h13v2H3v-2zm0 5h13v2H3v-2zm17-9v8.2a2.8 2.8 
       <div class="px-4 pt-3 pb-2.5 border-b border-line">
         <div class="text-[15px] font-medium truncate">{{ trackTitle(menu.target.value) }}</div>
         <div class="text-[12px] text-fg-muted truncate mt-0.5">
-          {{ menu.target.value.meta?.artist || '未知艺术家' }}
+          {{ player.artistText(menu.target.value.meta?.artist) }}
           <template v-if="menu.target.value.meta?.duration">
             · {{ fmtTime(menu.target.value.meta.duration) }}
           </template>

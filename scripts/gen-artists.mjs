@@ -21,7 +21,7 @@
  * 「谁和谁是同一个人」由 src/lib/artists.ts 的 artistKey 决定，这里不自己写一套：
  * 同一人的繁简写法（张韶涵 / 張韶涵）与末尾句点差异（S.E.N.S. / S.E.N.S）合成一条，
  * 联名（「阿悄, 庄心妍 & 王麟」）拆成三位、各人都算上这首联名曲。
- * 产出里的键是 artistKey，name 是该键下出现最多的写法。
+ * 产出里的键是 artistKey，name 是该键下出现最多的写法（再统一成简体）。
  *
  * 用法：
  *   pnpm artists             增量生成（30 天内查过且拿到内容的跳过）
@@ -37,7 +37,7 @@ import { loadTs } from './load-ts.mjs'
 
 // 只借用「谁和谁是同一个人」的规则与解析辅助，不引 parseArtistsFile：
 // 产物要按原始 JSON 读写（它保留 checkedAt / bioVersion），过一遍解析器会把这些丢掉
-const { normName, artistKey, splitArtists } = await loadTs(
+const { normName, artistKey, splitArtists, simplify } = await loadTs(
   new URL('../src/lib/artists.ts', import.meta.url),
 )
 
@@ -461,8 +461,9 @@ const UNKNOWN_ARTIST = new Set(['未知艺术家'].map((n) => artistKey(n)))
  * 109 首；S.E.N.S. 与 S.E.N.S 同理）；「阿悄, 庄心妍 & 王麟」这种联名则拆成三位，
  * 每位都算上这首歌 —— 一个人的歌手页不该漏掉他参与的联名曲。
  *
- * 展示名取该键下**出现最多的写法**（splitArtists 已经统一成简体），
- * 这样 72 首的「张韶涵」胜过 37 首的「張韶涵」，页面标题稳定。
+ * 展示名先 simplify 再计票，取票数最多的那个：于是「容祖兒」261 首与「容祖儿」算作
+ * 同一个写法，页面标题不会因为哪个写法恰好更多而在简繁之间来回跳。
+ * 注意 splitArtists 帮不上忙 —— 它只在拆联名时保留原文，繁简归一全在 artistKey / simplify。
  */
 function collectArtists() {
   const emby = JSON.parse(readFileSync(path.join(ROOT, 'public', 'emby.json'), 'utf8'))
@@ -476,10 +477,11 @@ function collectArtists() {
       if (!key || UNKNOWN_ARTIST.has(key)) continue
       let a = map.get(key)
       if (!a) {
-        a = { key, name: part.name, labels: new Map(), trackCount: 0, albums: new Map() }
+        a = { key, name: simplify(part.name), labels: new Map(), trackCount: 0, albums: new Map() }
         map.set(key, a)
       }
-      a.labels.set(part.name, (a.labels.get(part.name) ?? 0) + 1)
+      const label = simplify(part.name)
+      a.labels.set(label, (a.labels.get(label) ?? 0) + 1)
       a.trackCount++
       const album = (t.album || '').trim()
       if (!album) continue

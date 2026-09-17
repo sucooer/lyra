@@ -33,7 +33,6 @@ function onRow() {
   else player.playId(props.track.id)
 }
 
-const artist = computed(() => props.track.meta?.artist ?? '')
 const album = computed(() => props.track.meta?.album ?? '')
 /**
  * 一个 artist 字段里可能写着好几位歌手（「阿悄, 庄心妍 & 王麟」），
@@ -100,19 +99,23 @@ function gotoAlbum() {
         </svg>
       </div>
       <div class="text-[13px] leading-snug text-fg-muted truncate mt-0.5">
-        <template v-if="canArtist">
+        <!-- 有歌手信息就逐位渲染：可点时是按钮，不可点时（歌手页自己）是纯文本。
+             两条路都过 artistLabel，免得后者直接吐原始写法、把繁体漏回列表里 -->
+        <template v-if="artistParts.length">
           <template v-for="(p, i) in artistParts" :key="i">
             <span v-if="i">{{ p.sep }}</span>
             <button
+              v-if="canArtist"
               class="hover:text-fg hover:underline transition"
               title="前往歌手页"
               @click.stop="gotoArtist(p.name)"
             >
               {{ player.artistLabel(p.name) }}
             </button>
+            <span v-else>{{ player.artistLabel(p.name) }}</span>
           </template>
         </template>
-        <template v-else>{{ artist || (track.loading ? '解析中…' : '未知艺术家') }}</template>
+        <template v-else>{{ track.loading ? '解析中…' : '未知艺术家' }}</template>
       </div>
     </div>
 

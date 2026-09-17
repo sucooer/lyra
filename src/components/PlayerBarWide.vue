@@ -68,7 +68,7 @@ function titleOf(t: Track) {
   return t.meta?.title || t.url.split('/').pop()?.replace(/\.[a-z0-9]+$/i, '') || '未知曲目'
 }
 function artistOf(t: Track) {
-  return t.meta?.artist || '未知艺术家'
+  return player.artistText(t.meta?.artist)
 }
 function playFromQueue(t: Track) {
   player.playId(t.id)

@@ -35,6 +35,7 @@ import {
   normName,
   artistKey,
   splitArtists,
+  simplify,
   trackArtistKeys,
   type ArtistsFile,
   type ArtistInfo,
@@ -138,7 +139,7 @@ export const usePlayerStore = defineStore('player', {
       return t.meta?.title || filenameOf(t.url).replace(/\.[a-z0-9]+$/i, '')
     },
     displayArtist(): string {
-      return this.currentTrack?.meta?.artist || '未知艺术家'
+      return this.artistText(this.currentTrack?.meta?.artist)
     },
 
     /**
@@ -178,8 +179,9 @@ export const usePlayerStore = defineStore('player', {
     },
 
     /**
-     * 身份键 → 展示名：同一个人的各种写法里取**出现最多的那个**（并统一成简体）。
-     * 曲库里「张韶涵」72 首、「張韶涵」37 首，所以歌手页统一显示「张韶涵」。
+     * 身份键 → 展示名：同一个人的各种写法先统一成简体再多票取一，票数最多的当页面标题。
+     * 曲库里「張韶涵」37 首、「张韶涵」72 首，简化后并成 109 票，页面统一显示「张韶涵」；
+     * 「容祖兒」261 首同理显示「容祖儿」，不会因为繁体写法恰好更多就把标题写成繁体。
      * 键本身是归一化的产物（比如 S.E.N.S. 的键是 sens），不能当名字用，
      * 所以展示名必须单独算这一层。
      */
@@ -194,7 +196,8 @@ export const usePlayerStore = defineStore('player', {
             m = new Map<string, number>()
             counts.set(k, m)
           }
-          m.set(p.name, (m.get(p.name) ?? 0) + 1)
+          const label = simplify(p.name)
+          m.set(label, (m.get(label) ?? 0) + 1)
         }
       }
       const out: Record<string, string> = {}
@@ -390,12 +393,26 @@ export const usePlayerStore = defineStore('player', {
     },
 
     /**
-     * 歌手的展示名。入参是身份键（URL 里那个），必要时也能喂原始写法。
-     * 退路依次是：曲库里出现最多的写法 → artists.json 里的名字 → 键本身（实在没有就显示键）
+     * 一整条 artist 字段的展示文本（播放条、待播队列、右键菜单这类只有一个字符串位置的地方用）。
+     * 只逐字归一成简体、分隔符照旧，联名仍显示成「阿悄, 庄心妍 & 王麟」；
+     * 要「每位各自可点」的那种渲染在 TrackRow 里，走 splitArtists + artistLabel。
+     */
+    artistText(raw: string | null | undefined): string {
+      return simplify(String(raw ?? '').trim()) || '未知艺术家'
+    },
+
+    /**
+     * 歌手的展示名 —— 一律是简体。入参是身份键（URL 里那个），必要时也能喂原始写法。
+     * 退路依次是：曲库里票数最多的写法 → artists.json 里的名字 → 键本身（实在没有就显示键）；
+     * 后两条也过一遍 simplify，免得产物还没重跑时繁体名从退路漏出来。
      */
     artistLabel(name: string): string {
       const k = artistKey(name)
-      return this.artistNames[k] ?? this.artists.artists[k]?.name ?? name
+      const fromLibrary = this.artistNames[k]
+      if (fromLibrary) return fromLibrary
+      const stored = this.artists.artists[k]?.name
+      if (stored) return simplify(stored)
+      return simplify(name)
     },
 
     /** 某位歌手在曲库里的全部曲目（联名的歌曲也算他的：阿悄 & 徐良 两边都能查到） */
