@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import LyricsView from './LyricsView.vue'
 import { resolvedDark } from '../lib/theme'
-import { closeNowPlaying } from '../lib/nav'
+import { closeNowPlaying, openAlbum, openArtist } from '../lib/nav'
+import { splitArtists } from '../lib/artists'
 
 const player = usePlayerStore()
 const showLyrics = ref(false)
@@ -94,6 +95,30 @@ watch(cover, (c) => c && extractColor(c), { immediate: true })
 // 主题切换后重取主色调，浅色/深色的压暗档位不同
 watch(resolvedDark, () => cover.value && extractColor(cover.value))
 
+/**
+ * 歌手与专辑名也可点（与列表里的 TrackRow 同一套规则）：
+ * 联名曲逐位拆开，每人各自能进自己的歌手页；专辑挂在首位歌手名下，
+ * 免得同一张合辑在每位联名歌手页里各出现一次。
+ */
+const artistParts = computed(() =>
+  splitArtists(player.currentTrack?.meta?.artist ?? '').map((p) => ({
+    ...p,
+    // 展示名在这里一次算好（走 artistLabel 保证是简体），别在模板里反复调
+    label: player.artistLabel(p.name),
+  })),
+)
+const album = computed(() => (player.currentTrack?.meta?.album ?? '').trim())
+/** 专辑页要靠「归属歌手 + 专辑名」定位，没有歌手信息时不给可点的假象 */
+const canAlbum = computed(() => !!album.value && artistParts.value.length > 0)
+
+function gotoArtist(name: string) {
+  openArtist(name)
+}
+function gotoAlbum() {
+  const first = artistParts.value[0]?.name
+  if (first && canAlbum.value) openAlbum(first, album.value)
+}
+
 const progress = computed(() =>
   player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0,
 )
@@ -161,9 +186,52 @@ function fmt(sec: number): string {
 
         <div class="mt-6 text-center">
           <div class="text-xl md:text-2xl font-bold truncate">{{ player.displayTitle }}</div>
-          <div class="text-base md:text-lg text-np-muted truncate mt-0.5">
-            {{ player.displayArtist }}
-            <template v-if="player.currentTrack?.meta?.album"> — {{ player.currentTrack.meta.album }}</template>
+          <!--
+            歌手与专辑名可点（与列表里的 TrackRow 同一套规则）。
+            用 flex + truncate 而不是原来那种「一整行 nowrap 省略」：
+            链接变成 inline-block 之后，父元素的 text-overflow 不再管得住它们，
+            长专辑名会把按钮整个推到屏幕外（既难看也点不到，实测右边缘到 578px）。
+            份额这样分：歌手封顶 62% 且不参与收缩，专辑吃掉剩下的（不够就省略号）。
+            纯按比例收缩是不行的 —— 歌手名短（「郭静」）而专辑名长时，歌手会被压成
+            半个字；反过来歌手被压没了也不行，它是主身份。
+          -->
+          <div class="mt-0.5 flex items-center justify-center gap-x-1.5 text-base md:text-lg text-np-muted">
+            <span
+              v-if="artistParts.length"
+              class="min-w-0 truncate"
+              :class="album ? 'shrink-0 max-w-[62%]' : 'max-w-full'"
+            >
+              <template v-for="(p, i) in artistParts" :key="i">
+                <span v-if="i">{{ p.sep }}</span>
+                <button
+                  class="hover:text-np-fg hover:underline transition"
+                  title="前往歌手页"
+                  @click.stop="gotoArtist(p.name)"
+                >
+                  {{ p.label }}
+                </button>
+              </template>
+            </span>
+            <span
+              v-else
+              class="min-w-0 truncate"
+              :class="album ? 'shrink-0 max-w-[62%]' : 'max-w-full'"
+            >
+              {{ player.displayArtist }}
+            </span>
+
+            <template v-if="album">
+              <span class="shrink-0 opacity-60">—</span>
+              <button
+                v-if="canAlbum"
+                class="min-w-0 truncate text-left hover:text-np-fg hover:underline transition"
+                title="前往专辑页"
+                @click.stop="gotoAlbum"
+              >
+                {{ album }}
+              </button>
+              <span v-else class="min-w-0 truncate">{{ album }}</span>
+            </template>
           </div>
         </div>
 

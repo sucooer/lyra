@@ -180,8 +180,18 @@ export function initNav() {
 /** 进入某一层；已在该层则什么都不做 */
 function open(view: ViewRef) {
   if (activeView.value.kind === view.kind && activeView.value.key === view.key) return
-  push(view, usePlayerStore().showNowPlaying)
+  const player = usePlayerStore()
+  /*
+   * 全屏播放页是盖住整个界面的模态层（体积上是 z-50 的整屏浮层），
+   * 从它里面点歌手/专辑名进下一层时，模态层必须一起收起 —— 否则新页面被压在
+   * 底下，看起来就是「点了没反应」。
+   * 新记录写 nowPlaying: false，返回时由 popstate 的 apply() 恢复 true，
+   * 于是后退正好回到刚才的播放页：和别的层一样，一层退一次。
+   */
+  const modal = player.showNowPlaying
+  push(view, false)
   activeView.value = view
+  if (modal) player.showNowPlaying = false
 }
 
 export function openPlaylist(id: string) {
