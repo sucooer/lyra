@@ -1,9 +1,10 @@
 /**
  * 全局键盘快捷键
  * 空格: 播放/暂停  ←/→: 快退/快进5s  ↑/↓: 音量  n/p: 下一首/上一首  f: 全屏播放页
+ * / 或 ⌘K: 打开搜索（已经在搜索页时由 SearchView 自己把焦点还给输入框）
  */
 import type { usePlayerStore } from '../stores/player'
-import { openNowPlaying, closeNowPlaying } from './nav'
+import { openNowPlaying, closeNowPlaying, openSearch } from './nav'
 
 type Store = ReturnType<typeof usePlayerStore>
 
@@ -11,6 +12,17 @@ export function setupShortcuts(player: Store) {
   window.addEventListener('keydown', (e) => {
     const tag = (e.target as HTMLElement)?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+    if (e.code === 'Slash' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      openSearch()
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK') {
+      e.preventDefault()
+      openSearch()
+      return
+    }
 
     switch (e.code) {
       case 'Space':

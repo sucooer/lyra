@@ -3,7 +3,7 @@ import { computed, onMounted } from 'vue'
 import { usePlayerStore } from './stores/player'
 import { setupShortcuts } from './lib/shortcuts'
 import { initTheme, cycleTheme, themeMode, resolvedDark, themeLabel } from './lib/theme'
-import { activePlaylistId, activeAlbum, activeView, goHome, initNav } from './lib/nav'
+import { activePlaylistId, activeAlbum, activeView, goHome, initNav, openSearch } from './lib/nav'
 import PlayerBar from './components/PlayerBar.vue'
 import PlayerBarWide from './components/PlayerBarWide.vue'
 import NowPlaying from './components/NowPlaying.vue'
@@ -11,6 +11,7 @@ import Home from './components/Home.vue'
 import PlaylistView from './components/PlaylistView.vue'
 import ArtistView from './components/ArtistView.vue'
 import AlbumView from './components/AlbumView.vue'
+import SearchView from './components/SearchView.vue'
 import TrackMenu from './components/TrackMenu.vue'
 
 const player = usePlayerStore()
@@ -34,6 +35,8 @@ const headerTitle = computed(() => {
       return player.artistLabel(activeView.value.key)
     case 'album':
       return activeAlbum.value?.album ?? '专辑'
+    case 'search':
+      return '搜索'
     default:
       return '音乐'
   }
@@ -77,6 +80,20 @@ onMounted(() => {
         {{ headerTitle }}
       </h1>
 
+      <!-- 搜索入口：已经在搜索页就不重复显示（那一页的输入框就在下面） -->
+      <button
+        v-if="activeView.kind !== 'search'"
+        class="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
+        title="搜索（/ 或 ⌘K）"
+        @click="openSearch"
+      >
+        <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current">
+          <path
+            d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+          />
+        </svg>
+      </button>
+
       <button
         class="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"
         :title="themeLabel"
@@ -109,6 +126,7 @@ onMounted(() => {
           :artist="activeAlbum.artist"
           :album="activeAlbum.album"
         />
+        <SearchView v-else-if="activeView.kind === 'search'" />
         <Home v-else />
       </main>
       <PlayerBar />

@@ -11,6 +11,12 @@ const props = withDefaults(
     track: Track
     /** library = 资料库列表（点播会退出歌单上下文）；playlist = 歌单内（在歌单顺序里播） */
     source?: 'library' | 'playlist'
+    /**
+     * 临时列表的播放上下文（搜索结果这类）：给了它，点任一行都先把这份列表
+     * 设成播放上下文、再播这一首，于是「下一首」顺着搜索结果走而不是整个资料库。
+     * 由调用方算一次整体传入（所有行共用同一个对象，避免每行都新建一份引发重渲染）。
+     */
+    playContext?: { ids: string[]; label: string }
     /** 歌手名是否可点进歌手页（歌手页自己要关掉，否则点了等于原地不动） */
     artistLink?: boolean
     /** 专辑名是否可点进专辑页 */
@@ -29,6 +35,8 @@ const queued = computed(() => player.upNext.includes(props.track.id))
 
 function onRow() {
   if (active.value) player.togglePlay()
+  else if (props.playContext?.ids.length)
+    player.playInContext(props.track.id, props.playContext.ids, props.playContext.label)
   else if (props.source === 'library') player.playFromLibrary(props.track.id)
   else player.playId(props.track.id)
 }

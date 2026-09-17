@@ -13,7 +13,7 @@ import { artistKey } from './artists'
  * #/album/<歌手>/<专辑>），静态托管刷新也不会 404。
  */
 
-export type ViewKind = 'home' | 'playlist' | 'artist' | 'album'
+export type ViewKind = 'home' | 'playlist' | 'artist' | 'album' | 'search'
 
 /** 复合 key 的分隔符：专辑的归属歌手与专辑名可能都含斜杠，用不可见字符分隔最稳 */
 const SEP = '\u001f'
@@ -78,6 +78,9 @@ function urlFor(v: ViewRef): string {
     const [artist, album] = v.key.split(SEP)
     return `${base}#/album/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`
   }
+  // 搜索词刻意不进 URL：每敲一个字就写一次历史会把返回键淹掉。
+  // 词存在 store 里（player.searchQuery），进歌手页再返回时还在。
+  if (v.kind === 'search') return `${base}#/search`
   return base
 }
 
@@ -90,6 +93,7 @@ function viewFromUrl(): ViewRef {
   if (m) return { kind: 'artist', key: artistKey(decodeURIComponent(m[1])) }
   m = /^#\/album\/([^/]+)\/(.+)$/.exec(h)
   if (m) return { kind: 'album', key: albumKey(decodeURIComponent(m[1]), decodeURIComponent(m[2])) }
+  if (/^#\/search\/?$/.test(h)) return { kind: 'search', key: '' }
   return { ...HOME }
 }
 
@@ -190,6 +194,33 @@ export function openArtist(name: string) {
 
 export function openAlbum(artist: string, album: string) {
   open({ kind: 'album', key: albumKey(artist, album) })
+}
+
+/**
+ * 进入搜索页。
+ * 已在搜索页时把焦点还给输入框 —— 快捷键（/ 或 Ctrl+K）在页内按也要有反应，
+ * 而「已在该层就什么都不做」的 open() 是给不出这个反馈的。
+ */
+export function openSearch() {
+  const player = usePlayerStore()
+  const search: ViewRef = { kind: 'search', key: '' }
+
+  if (player.showNowPlaying) {
+    /*
+     * 全屏播放页是盖住整个界面的模态层（顶栏也被它压住），此时只有快捷键够得着搜索。
+     * 若照常 push 一层，搜索页会被压在模态层底下，看起来就是「按了没反应」。
+     * 所以这里把它收掉，并且用 replace 把「正在播放」那条记录就地改写成搜索页：
+     * 不能用 closeNowPlaying() + open()——back() 是异步的，紧接着的 pushState
+     * 会被随后的 popstate 用旧 state 覆盖，两层状态就错位了。
+     */
+    replace(search, false)
+    activeView.value = { ...search }
+    player.showNowPlaying = false
+  } else if (activeView.value.kind !== 'search') {
+    open(search)
+  }
+
+  window.dispatchEvent(new CustomEvent('lyra:focus-search'))
 }
 
 export function goHome() {

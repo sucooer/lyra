@@ -126,6 +126,12 @@ export const usePlayerStore = defineStore('player', {
     artists: { generatedAt: '', artists: {} } as ArtistsFile,
     /** 电台封面的随机种子：每次点电台都换一张新封面 */
     radioSeed: 20260916,
+    /**
+     * 搜索框里的词。
+     * 放在 store 而不是 SearchView 里：搜索页也是个导航层，点进歌手页再返回时
+     * 组件会被卸载重建，词放组件里就丢了（返回后是个空搜索框）。
+     */
+    searchQuery: '',
   }),
 
   getters: {
@@ -384,6 +390,17 @@ export const usePlayerStore = defineStore('player', {
     playFromLibrary(id: string) {
       this.context = []
       this.contextLabel = ''
+      this.playId(id)
+    },
+
+    /**
+     * 按一份临时列表（搜索结果这种）播放其中某一首：
+     * 点哪首就从哪首开始，往后顺着这份列表走，而不是回到整个资料库。
+     */
+    playInContext(id: string, ids: string[], label: string) {
+      this.setContext(ids, label)
+      // 上一份上下文的待播队列不能带过来，否则「接下来播放」会串味
+      this.upNext = []
       this.playId(id)
     },
 
