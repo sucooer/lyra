@@ -35,7 +35,9 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { loadTs } from './load-ts.mjs'
 
-const { parseArtistsFile, normName, artistKey, splitArtists } = await loadTs(
+// 只借用「谁和谁是同一个人」的规则与解析辅助，不引 parseArtistsFile：
+// 产物要按原始 JSON 读写（它保留 checkedAt / bioVersion），过一遍解析器会把这些丢掉
+const { normName, artistKey, splitArtists } = await loadTs(
   new URL('../src/lib/artists.ts', import.meta.url),
 )
 
@@ -510,28 +512,32 @@ function collectArtists() {
 
 const { artists: libArtists, total: libTrackCount } = collectArtists()
 const prevRaw = await readJson(OUT, null)
-const prev = parseArtistsFile(prevRaw)
 
 /**
- * 老产物里的键可能还是异写（「容祖兒」「S.E.N.S.」「Various Artists」），
- * 按新键直接查会查不到，已经抓到的简介与专辑就会被整批重抓。
- * 这里再按「老键归一后相同」兜一层，让归一规则升级不丢数据。
+ * 上一轮的条目，按**归一键**索引。
+ *
+ * 三件事都在这里一次做完：
+ *   1. 老产物里的键可能还是异写（「容祖兒」「S.E.N.S.」「Various Artists」），
+ *      按新键直接查会查不到 → 已经抓到的简介与专辑会被整批重抓；
+ *   2. 取的是**原始 JSON** 里那条，而不是 parseArtistsFile 的结果 —— 解析器只认
+ *      自己声明的字段，会把 checkedAt / bioVersion 吃掉，于是「查过」变成「没查过」，
+ *      整库每轮重抓（实测真的发生过：48 位全部被当成待处理）；
+ *   3. 同一人写过好几条时（張韶涵 + 张韶涵）取先出现的，够用。
  */
 const prevByKey = new Map()
 for (const [oldKey, raw] of Object.entries(prevRaw?.artists ?? {})) {
   const k = artistKey(oldKey) || artistKey(raw?.name ?? '')
   if (k && !prevByKey.has(k)) prevByKey.set(k, raw)
 }
-/** 上一轮的条目（新的直接命中，老的走归一回溯） */
-const prevOf = (key) => prev.artists[key] ?? prevByKey.get(key)
+const prevOf = (key) => prevByKey.get(key)
 
 const now = Date.now()
-/** 上一次查这个歌手是什么时候（parseArtistsFile 不保留 checkedAt，从原始 JSON 取） */
+/** 上一次查这个歌手是什么时候 */
 function ageOf(key) {
   const at = prevOf(key)?.checkedAt
   return at ? (now - Date.parse(at)) / 86400000 : Infinity
 }
-/** 上一次抓简介用的是哪版规则（同样绕开 parseArtistsFile，从原始 JSON 取） */
+/** 上一次抓简介用的是哪版规则 */
 function bioVerOf(key) {
   return prevOf(key)?.bioVersion ?? 0
 }
