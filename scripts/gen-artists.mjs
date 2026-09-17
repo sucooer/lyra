@@ -90,7 +90,7 @@ function noteFail(host, msg) {
   console.log(`  （${host}：${msg}）`)
 }
 
-async function get(url, { as = 'text', timeout = TIMEOUT } = {}) {
+async function get(url, { as = 'text', timeout = TIMEOUT, quiet = false } = {}) {
   let host
   try {
     host = new URL(url).host
@@ -106,7 +106,8 @@ async function get(url, { as = 'text', timeout = TIMEOUT } = {}) {
       headers: { 'user-agent': UA, accept: as === 'json' ? 'application/json' : 'text/html' },
     })
     if (!r.ok) {
-      noteFail(host, `HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 80)}`)
+      // quiet：404 属于正常结果（该标题在维基上就没有），不必当成故障播报
+      if (!quiet) noteFail(host, `HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 80)}`)
       return null
     }
     return as === 'json' ? await r.json() : await r.text()
@@ -300,16 +301,35 @@ function whyWiki(j) {
       if (p.missing !== undefined) return `缺:${p.title}`
       if (p.pageprops?.disambiguation !== undefined) return `歧:${p.title}`
       if (!p.extract) return `无摘要:${p.title}`
-      return `短:${p.title}`
+      // 带上实际长度与开头几个字：分不清「字段为空」和「内容不对」时，只能靠它定位
+      const t = String(p.extract).trim()
+      return `短${t.length}:${p.title}:${t.slice(0, 16)}`
     })
     .join('/')
 }
 
 /**
+ * 维基 REST summary 兜底。
+ * action API 的 exintro 在部分条目上会给出空/极短的 extract（把候选项列出来，
+ * 却一个都够不上简介的下限），REST 端点走另一条渲染路径，且直接给 type 字段 ——
+ * disambiguation 一眼可辨，不必靠正文关键词去猜。对繁简重定向也更宽容。
+ */
+async function restBio(title, lang) {
+  const j = await get(
+    `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`,
+    { as: 'json', quiet: true },
+  )
+  if (!j || j.type === 'disambiguation' || j.type === 'no-extract') return null
+  const text = String(j.extract ?? '').trim()
+  if (text.length < 60) return null
+  return { bio: text, url: j.content_urls?.desktop?.page }
+}
+
+/**
  * 维基百科导言。
  * 先按条目标题精确查（redirects=1 既能处理重定向，也能跨繁简，如 Bandari→班得瑞）；
- * 查不到再退回全文搜索 —— 曲库里不少歌手用的是舞台名、日文名或带符号的写法
- * （「S.E.N.S」「矶村由纪子」「DJ OKAWARI」），标题对不上但正文搜得到。
+ * 再试 REST summary；最后退回全文搜索 —— 曲库里不少歌手用的是舞台名、日文名或带符号的
+ * 写法（「S.E.N.S」「矶村由纪子」「DJ OKAWARI」），标题对不上但正文搜得到。
  */
 async function wikiBio(name, lang) {
   const base =
@@ -320,6 +340,8 @@ async function wikiBio(name, lang) {
   const exact = await get(`${base}&titles=${encodeURIComponent(name)}`, { as: 'json' })
   const hit = pickBio(exact, name, lang)
   if (hit) return hit
+  const rest = await restBio(name, lang)
+  if (rest) return rest
   if (MULTI_ARTIST.test(name)) return { diag: `${lang} 联名不搜` }
   const found = await get(`${base}&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=5`, {
     as: 'json',
