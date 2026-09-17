@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/gen-meta.mjs && node scripts/gen-emby.mjs && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "meta": "node scripts/gen-meta.mjs",
     "emby": "node scripts/gen-emby.mjs",
@@ -23,7 +23,6 @@
     "@tailwindcss/vite": "^4.1.4",
     "@vitejs/plugin-vue": "^5.2.3",
     "esbuild": "^0.25.0",
-    "ffmpeg-static": "^5.3.0",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"

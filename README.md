@@ -39,7 +39,7 @@
 1. 编辑 `public/playlist.json`，往数组里加音频直链（中文文件名需百分号编码）
 2. `pnpm meta` 解析新增条目（增量，已缓存的跳过）
 3. `pnpm label` 把解析出来的歌名回填进 `playlist.json`，让源文件自己认得出歌
-4. `pnpm build` 构建（内部会先跑一次 `pnpm meta`，部署平台也走这条）
+4. `pnpm build` 构建（只跑 `vite build`；元数据产物由第 2 步生成、随仓库提交）
 
 **第 3 步解决的是「加完就忘」**：远程直链多半是随机 token（`Pks0olqo.flac`），
 光看链接认不出是哪首歌，而能认出歌的元数据只存在于生成物 `meta.json` 里 ——
@@ -262,8 +262,15 @@ npm run build # 产物在 dist/
 
 Pages 控制台连接仓库：构建命令 `npm run build`，输出目录 `dist`。CORS 代理由 `functions/api/proxy.js` 自动生效。
 
-若要让构建时顺带同步 Emby（可选），在 Pages 的 Settings → Environment variables 里加
-`EMBY_URL` 与 `EMBY_API_KEY`；不加则用仓库里已提交的 `public/emby.json` 快照，构建照常。
+构建只做一件事：`vite build`。**不要在构建里同步 Emby** —— 数据同步交给 cron（`.github/workflows/daily.yml`）
+与本机的 `pnpm meta` / `pnpm emby`，产物随仓库提交；构建期联网只会多一个挂起点
+（Emby 是裸 IP 时 CF 边缘还会直接回 403 `error code: 1003`）。
+`functions/api/emby/stream.js` 需要的 `EMBY_URL` / `EMBY_API_KEY` 仍要在 Pages 的环境变量里配
+（**Functions 的环境变量是部署级快照，改完必须重新部署才生效**），但它与构建无关。
+
+⚠️ **别把 `ffmpeg-static` 加回依赖**：它 5.x 的 postinstall 要下载约 79MB 二进制，
+在部署构建里一旦卡住表现为「build 步骤跑了好几分钟、一行日志都没有」。
+封面压缩是 `gen-meta` 的可选优化，缺 ffmpeg 就按原图落盘。
 
 或 CLI 直接部署：`npx wrangler pages deploy dist --project-name=apple-music-player`
 

@@ -13,10 +13,12 @@
  * 每次运行结束会清掉 covers/ 与 lyrics/ 里不再被 meta.json 引用的文件。
  *
  * 封面长边压到 MAX_COVER_EDGE 以内（原图动辄 2048px / 800KB，界面里最多显示到约 300px）。
- * 这一步用 ffmpeg，属可选优化：找不到就按原图落盘，其余流程不受影响。
- * 查找顺序：环境变量 FFMPEG_PATH → 系统 PATH 上的 ffmpeg → 依赖里的 ffmpeg-static。
- * 最后一条是给部署平台的：Cloudflare Pages 的构建镜像里没有 ffmpeg，只能靠
- * ffmpeg-static 的 postinstall 把二进制装下来，才能在构建期把封面压小。
+ * 这一步用 ffmpeg，**属可选优化**：找不到就按原图落盘，其余流程不受影响。
+ * 查找顺序：环境变量 FFMPEG_PATH → 系统 PATH 上的 ffmpeg → `import('ffmpeg-static')`
+ * （包已经不在依赖里了，装了才走得到这一条；失败也只是警告）。
+ * 别为了「让构建机能压封面」再把 ffmpeg-static 加回依赖：它 5.x 的 postinstall 要下载
+ * 约 79MB 二进制，部署时一旦卡住是几分钟无日志的静默挂起（2026-09-17 CF Pages 那次）。
+ * 需要压封面就装系统 ffmpeg 并设 FFMPEG_PATH。
  *
  * 用法：
  *   node scripts/gen-meta.mjs            # 只解析 meta.json 里缺失的条目

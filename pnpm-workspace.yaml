@@ -1,5 +1,6 @@
 onlyBuiltDependencies:
   - esbuild
-  # ffmpeg-static 的二进制靠 postinstall 下载，pnpm 10 默认拦截，必须显式放行，
-  # 否则部署平台（Cloudflare Pages 构建镜像里没有 ffmpeg）压不了封面。
-  - ffmpeg-static
+  # 这里**不要再放 ffmpeg-static**：它 5.x 的 postinstall 会下载约 79MB 的二进制，
+  # 部署构建里一卡就是几分钟、且没有任何日志输出（Cloudflare Pages 那次就是这样挂的）。
+  # 封面压缩是 gen-meta 的可选优化，找不到 ffmpeg 就按原图落盘，不影响构建与播放；
+  # 需要的话本机装系统 ffmpeg，或 `pnpm add -D ffmpeg-static` + `pnpm approve-builds`。
