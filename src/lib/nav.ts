@@ -104,22 +104,45 @@ function back() {
   setTimeout(() => (goingBack = false), 600)
 }
 
+/**
+ * 入 history 前必须拆成普通对象。
+ *
+ * activeView 是 ref，读出来的 .value 是 Vue 的响应式 Proxy；而 pushState /
+ * replaceState 的状态要走结构化克隆，规范对 Proxy 直接抛 DataCloneError，
+ * 于是「点播放条展开」这类调用会静默失败（showNowPlaying 那行根本执行不到）。
+ * ViewRef 就两个字符串字段，拷一份最省事。
+ */
+function plain(v: ViewRef): ViewRef {
+  return { kind: v.kind, key: v.key }
+}
+
 /** 压入一层 */
 function push(view: ViewRef, nowPlaying: boolean) {
   const prev = stateOf()
-  const state: LyraState = {
-    lyra: true,
-    depth: (prev?.depth ?? 0) + 1,
-    view,
-    nowPlaying,
+  const depth = (prev?.depth ?? 0) + 1
+  const state: LyraState = { lyra: true, depth, view: plain(view), nowPlaying }
+  try {
+    history.pushState(state, '', urlFor(view))
+  } catch (e) {
+    // 历史记录写不进去时别让整个交互哑掉（异常会打断事件处理函数，
+    // 后面的 store 赋值就再也执行不到）。退化成改写当前记录，
+    // depth 保持原值，这样返回键仍旧退回上一层而不是一路退站。
+    console.warn('[nav] pushState 失败，退化为就地改写', e)
+    replaceWith({ ...state, depth: prev?.depth ?? 0 })
   }
-  history.pushState(state, '', urlFor(view))
 }
 
 /** 就地改写当前记录（首屏、或没有上一层可退时的兜底） */
 function replace(view: ViewRef, nowPlaying: boolean) {
-  const state: LyraState = { lyra: true, depth: 0, view, nowPlaying }
-  history.replaceState(state, '', urlFor(view))
+  replaceWith({ lyra: true, depth: 0, view: plain(view), nowPlaying })
+}
+
+function replaceWith(state: LyraState) {
+  try {
+    history.replaceState(state, '', urlFor(state.view))
+  } catch (e) {
+    console.warn('[nav] replaceState 失败，本次导航不写历史', e)
+  }
 }
 
 /** 历史状态 → 视图：popstate 与调用方共用这条唯一路径 */
