@@ -1,16 +1,19 @@
 /**
  * 每日推荐：按日期从曲库里轮换出当天的歌单。
  *
- * 这个模块刻意写成「纯函数 + 零 import」，因为浏览器和 Node 两边共用：
+ * 这个模块是「纯函数 + 不碰浏览器 API」，因为浏览器和 Node 两边共用：
  *   1. 浏览器 stores/player.ts —— 打开页面时取当天推荐；daily.json 缺失或过期时就地现算
  *   2. Node scripts/gen-daily.mjs —— cron 每天预生成 public/daily.json
- * Node 直接跑 .ts 只做类型擦除、不做路径补全，所以这里不能出现无后缀的 import，
- * 也不能用 enum / namespace 这类擦不掉的语法。两边输入相同时结果必须逐字一致。
+ * 两边输入相同时结果必须逐字一致（含推荐语，见 lib/blurb.ts）。
+ * 依赖只能是同样纯的同目录模块（blurb → artists → t2s）：脚本侧走 scripts/load-ts.mjs
+ * 用 esbuild 打包，浏览器侧走 Vite，无后缀 import 两边都能解析；
+ * 但不能用 enum / namespace 这类擦不掉的语法。
  *
  * 轮换规则：把曲库按直链哈希排成一个固定顺序，第 n 天取从 (n × 每天首数) 开始的连续一段。
  * 不用「随机抽」是因为随机会隔三差五撞上前几天抽过的，而首尾相接的轮换能让相邻两天
  * 基本不重样（曲库 923 首、每天 30 首时，轮到第 31 天才开始重复）。
  */
+import { buildDailyBlurb, type BlurbMeta } from './blurb'
 
 /** 歌单 id：会出现在地址栏 #/playlist/daily，改动等于换歌单身份 */
 export const DAILY_ID = 'daily'
@@ -114,16 +117,42 @@ export interface DailyPick {
   date: string
   title: string
   subtitle: string
+  /** 推荐语：由当天曲目的真实元数据算出（见 lib/blurb.ts），数据不足时是空串 */
+  blurb: string
   urls: string[]
 }
 
-/** 按同一套文案组装一份每日推荐；服务端写文件、浏览器现算都走这里 */
-export function buildDaily(urls: string[], date: string = dateKey(), size?: number): DailyPick {
+/**
+ * 生成推荐语所需的外部信息。两边各自把自己手上的那份视图喂进来：
+ * 脚本读 meta.json + emby.json + artists.json，浏览器读 store 里已合并好的
+ * track.meta 与 artistLabel。漏传只是没有推荐语，不影响选歌 —— 选歌只依赖 urls。
+ */
+export interface DailyContext {
+  /** 直链 → 元数据（年份 / 歌手 / 专辑 / 时长） */
+  metaOf?: (url: string) => BlurbMeta | undefined
+  /** 歌手键 → 展示名，走 app 的统一规则，免得文案里的名字和歌手页标题对不上 */
+  labelOf?: (key: string) => string | undefined
+}
+
+/**
+ * 按同一套文案组装一份每日推荐；服务端写文件、浏览器现算都走这里。
+ */
+export function buildDaily(
+  urls: string[],
+  date: string = dateKey(),
+  size?: number,
+  ctx: DailyContext = {},
+): DailyPick {
   const picked = pickDaily(urls, date, size)
   return {
     date,
     title: DAILY_TITLE,
     subtitle: dailySubtitle(date, picked.length),
+    blurb: buildDailyBlurb(
+      picked.map((u) => ctx.metaOf?.(u) ?? {}),
+      date,
+      ctx,
+    ),
     urls: picked,
   }
 }
@@ -160,5 +189,7 @@ export function parseDailyFile(raw: unknown): DailyPick | null {
     typeof o.subtitle === 'string' && o.subtitle.trim()
       ? o.subtitle.trim()
       : dailySubtitle(date, urls.length)
-  return { date, title, subtitle, urls }
+  // 推荐语可以缺（旧产物、或手写的 daily.json）：前端会拿自己的元数据补算一份
+  const blurb = typeof o.blurb === 'string' ? o.blurb.trim() : ''
+  return { date, title, subtitle, blurb, urls }
 }

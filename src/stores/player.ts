@@ -26,6 +26,7 @@ import {
   type PlaylistEntry,
 } from '../lib/playlist'
 import { buildDaily, dateKey, parseDailyFile, DAILY_ID, type DailyPick } from '../lib/daily'
+import { buildDailyBlurb } from '../lib/blurb'
 import { parseEmbyFile, EMBY_META_URL } from '../lib/emby'
 import {
   ARTISTS_URL,
@@ -801,10 +802,14 @@ export const usePlayerStore = defineStore('player', {
       } catch {
         /* 拿不到文件就现算 */
       }
-      pick ??= buildDaily(
-        this.tracks.map((t) => t.url),
-        today,
-      )
+      // 直链 → 元数据：推荐语要从年份 / 歌手 / 专辑 / 时长取材。
+      // 这份视图与 scripts/gen-daily.mjs 拼出来的那份一一对应，算出的文案才会逐字一致。
+      const byUrl = new Map(this.tracks.map((t) => [t.url, t.meta ?? undefined]))
+      const labelOf = (k: string) => this.artistLabel(k)
+      pick ??= buildDaily(this.tracks.map((t) => t.url), today, undefined, {
+        metaOf: (u) => byUrl.get(u),
+        labelOf,
+      })
       if (pick.urls.length === 0) return
 
       const def: PlaylistDef = {
@@ -812,6 +817,17 @@ export const usePlayerStore = defineStore('player', {
         type: 'playlist',
         title: pick.title,
         subtitle: pick.subtitle,
+        /**
+         * 文案优先用 daily.json 里 cron 生成的那份；旧产物没有这个字段（或它为空）时，
+         * 按同一套规则用本地元数据补一份 —— 否则刚升级那几天页面上会缺一块。
+         */
+        blurb:
+          pick.blurb ||
+          buildDailyBlurb(
+            pick.urls.map((u) => byUrl.get(u) ?? {}),
+            pick.date,
+            { labelOf },
+          ),
         // urls 是精确匹配：名单外的一律不收，改歌手名也不会让推荐跑偏
         urls: pick.urls,
       }

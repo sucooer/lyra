@@ -16,6 +16,12 @@ export interface PlaylistDef {
   type?: 'radio' | 'playlist'
   title: string
   subtitle?: string
+  /**
+   * 推荐语 / 导语：歌单页标题下面那段说明文字。
+   * 每日推荐的这份由 scripts/gen-daily.mjs 算出来写进 daily.json（见 lib/blurb.ts）；
+   * 手工歌单想在 playlists.json 里自己写一段也行。
+   */
+  blurb?: string
   /** 显式指定封面（/covers/xxx.jpg 或外链）；缺省时按成员曲目封面拼贴，再退化为程序化生成 */
   cover?: string
   /** true = 包含全部曲目 */
@@ -143,6 +149,7 @@ export function normalizePlaylists(raw: unknown): PlaylistDef[] {
       type: d.type === 'radio' ? 'radio' : 'playlist',
       title: d.title,
       subtitle: typeof d.subtitle === 'string' ? d.subtitle : undefined,
+      blurb: typeof d.blurb === 'string' ? d.blurb : undefined,
       cover: typeof d.cover === 'string' ? d.cover : undefined,
       all: d.all === true,
       urls: strArr(d.urls),

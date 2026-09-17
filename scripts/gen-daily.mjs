@@ -9,8 +9,14 @@
  * 两边用同一套规则，所以即使这个脚本没跑成（cron 挂了、或本地没跑过），
  * 页面打开时也会就地算出完全一样的一份，不会出现「今天没有推荐」。
  *
- * 输出里只有直链和日期，不放歌名：歌名是 meta.json / emby.json（生成物）的职责，
- * 这个文件只负责「今天是哪几首」。想确认是哪几首看下面的运行日志。
+ * 输出里只有日期、直链与一段推荐语，不放整份曲目清单：歌名是 meta.json / emby.json
+ * （生成物）的职责，这个文件只负责「今天是哪几首、为什么是这几首」。想确认是哪几首看
+ * 下面的运行日志。
+ *
+ * 推荐语由 src/lib/blurb.ts 从当天曲目的元数据里算出（年份跨度 / 歌手阵容 / 专辑 /
+ * 日语占比 / 曲长），所以这个脚本要读 meta.json 与 emby.json 拼出和前端一样的元数据视图，
+ * 再读 artists.json 拿歌手展示名 —— 两边输入一致，文案才会逐字一致（前端在 daily.json
+ * 缺失或过期时也会就地现算一份）。
  *
  * 用法：
  *   pnpm daily                     生成今天的
@@ -33,7 +39,9 @@ const { isEmbyStreamUrl } = await loadTs(new URL('../src/lib/emby.ts', import.me
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PLAYLIST_PATH = resolve(ROOT, 'public/playlist.json')
+const META_PATH = resolve(ROOT, 'public/meta.json')
 const EMBY_PATH = resolve(ROOT, 'public/emby.json')
+const ARTISTS_PATH = resolve(ROOT, 'public/artists.json')
 const DAILY_PATH = resolve(ROOT, 'public/daily.json')
 
 /** 支持 --date 2026-09-18 与 --date=2026-09-18 两种写法 */
@@ -58,6 +66,19 @@ if (!existsSync(PLAYLIST_PATH)) {
   process.exit(1)
 }
 
+/**
+ * 与前端 store 一致的元数据视图：先 meta.json，再让 emby.json 覆盖（同名直链以 Emby 为准），
+ * 最后叠 playlist.json 的人工覆写。推荐语只从这里取材 —— 前端走的是 store 里同一份合并结果。
+ */
+let cachedMeta = {}
+if (existsSync(META_PATH)) {
+  try {
+    cachedMeta = JSON.parse(readFileSync(META_PATH, 'utf8'))?.tracks ?? {}
+  } catch {
+    console.error('public/meta.json 解析失败，本次的推荐语会缺年份/专辑等字段')
+  }
+}
+
 /** 与前端 lib/playlist.ts 的 parsePlaylist 保持同一套取舍：字符串或对象写法、只认 http(s)、按首次出现去重 */
 const raw = JSON.parse(readFileSync(PLAYLIST_PATH, 'utf8'))
 if (!Array.isArray(raw)) {
@@ -70,7 +91,15 @@ for (const item of raw) {
   const src = typeof item === 'string' ? { url: item } : item
   const url = typeof src?.url === 'string' ? src.url.trim() : ''
   if (!url || !/^https?:\/\//i.test(url) || info.has(url)) continue
-  info.set(url, { title: typeof src.title === 'string' ? src.title : '', artist: typeof src.artist === 'string' ? src.artist : '' })
+  const c = cachedMeta[url] ?? {}
+  info.set(url, {
+    // 人工覆写优先（前端 applyOverride 也是这个次序）
+    title: typeof src.title === 'string' && src.title ? src.title : (c.title ?? ''),
+    artist: typeof src.artist === 'string' && src.artist ? src.artist : (c.artist ?? ''),
+    album: typeof src.album === 'string' && src.album ? src.album : c.album,
+    year: c.year,
+    duration: c.duration,
+  })
   urls.push(url)
 }
 const manualCount = urls.length
@@ -88,7 +117,13 @@ if (existsSync(EMBY_PATH)) {
     const emby = JSON.parse(readFileSync(EMBY_PATH, 'utf8'))
     for (const [url, meta] of Object.entries(emby?.tracks ?? {})) {
       if (!isEmbyStreamUrl(url) || info.has(url)) continue
-      info.set(url, { title: meta?.title ?? '', artist: meta?.artist ?? '' })
+      info.set(url, {
+        title: meta?.title ?? '',
+        artist: meta?.artist ?? '',
+        album: meta?.album,
+        year: meta?.year,
+        duration: meta?.duration,
+      })
       urls.push(url)
       embyCount++
     }
@@ -102,7 +137,20 @@ if (urls.length === 0) {
   process.exit(1)
 }
 
-const pick = buildDaily(urls, wantDate, size)
+// 歌手展示名：与前端 store 的 artistLabel 同一个来源（artists.json 的 name 字段，已是简体）
+let artistNames = {}
+if (existsSync(ARTISTS_PATH)) {
+  try {
+    artistNames = JSON.parse(readFileSync(ARTISTS_PATH, 'utf8'))?.artists ?? {}
+  } catch {
+    /* 产物缺失时退回到「当天出现最多的写法」，不影响选歌 */
+  }
+}
+
+const pick = buildDaily(urls, wantDate, size, {
+  metaOf: (u) => info.get(u),
+  labelOf: (k) => artistNames[k]?.name,
+})
 
 const prevText = existsSync(DAILY_PATH) ? readFileSync(DAILY_PATH, 'utf8') : ''
 let prev = null
@@ -111,8 +159,11 @@ try {
 } catch {
   /* 旧文件坏了就当作没有 */
 }
+// 文案也要比：曲目没变但文案生成规则改了时，同样需要落盘
 const sameAsPrev =
-  prev?.date === pick.date && JSON.stringify(prev?.urls ?? []) === JSON.stringify(pick.urls)
+  prev?.date === pick.date &&
+  JSON.stringify(prev?.urls ?? []) === JSON.stringify(pick.urls) &&
+  (prev?.blurb ?? '') === pick.blurb
 
 const out = {
   date: pick.date,
@@ -120,6 +171,7 @@ const out = {
   count: pick.urls.length,
   title: pick.title,
   subtitle: pick.subtitle,
+  blurb: pick.blurb,
   urls: pick.urls,
 }
 const nextText = JSON.stringify(out, null, 2) + '\n'
@@ -135,10 +187,12 @@ for (const [i, u] of pick.urls.entries()) {
   console.log(`  ${String(i + 1).padStart(3)}. ${m.title || '（未知 · 还没跑过 pnpm label）'}${bits ? `  —  ${bits}` : ''}`)
 }
 
+console.log(`\n推荐语：${pick.blurb || '（元数据不足，这次没有文案）'}`)
+
 if (dry) {
   console.log(`\n--dry：以上是待写入内容，没有改动 ${DAILY_PATH}`)
 } else if (sameAsPrev) {
-  console.log(`\npublic/daily.json 已经就是这个日期与曲目（保留原 generatedAt），无需改动`)
+  console.log(`\npublic/daily.json 已经就是这个日期、曲目与文案（保留原 generatedAt），无需改动`)
 } else {
   writeFileSync(DAILY_PATH, nextText)
   console.log(`\n已写入 public/daily.json（副标题：${dailySubtitle(pick.date, pick.urls.length)}）`)

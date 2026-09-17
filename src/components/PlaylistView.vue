@@ -117,6 +117,15 @@ const playingHere = computed(() => {
           <template v-if="totalTime"> · {{ fmtTotal(totalTime) }}</template>
         </div>
 
+        <!-- 推荐语 / 导语（每日推荐由脚本生成，见 lib/blurb.ts）。限宽是为了别拉成一整行长文 -->
+        <p
+          v-if="collection.def.blurb"
+          data-playlist-blurb
+          class="mt-2.5 max-w-[46ch] mx-auto lg:mx-0 text-[14px] lg:text-[15px] leading-relaxed text-fg-muted"
+        >
+          {{ collection.def.blurb }}
+        </p>
+
         <div class="mt-5 flex items-center gap-3 justify-center lg:justify-start">
           <button
             class="flex items-center gap-2 px-5 h-10 rounded-full bg-solid text-on-solid text-[15px] font-medium hover:opacity-85 transition"

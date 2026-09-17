@@ -72,6 +72,7 @@ function gotoAlbum() {
 
 <template>
   <div
+    data-track-row
     class="group flex items-center gap-3 py-2.5 cursor-pointer active:bg-fill transition-colors"
     @dblclick="onRow"
     @click="onRow"
