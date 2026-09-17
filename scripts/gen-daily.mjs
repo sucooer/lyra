@@ -13,21 +13,27 @@
  * （生成物）的职责，这个文件只负责「今天是哪几首、为什么是这几首」。想确认是哪几首看
  * 下面的运行日志。
  *
- * 推荐语由 src/lib/blurb.ts 从当天曲目的元数据里算出（年份跨度 / 歌手阵容 / 专辑 /
- * 日语占比 / 曲长），所以这个脚本要读 meta.json 与 emby.json 拼出和前端一样的元数据视图，
- * 再读 artists.json 拿歌手展示名 —— 两边输入一致，文案才会逐字一致（前端在 daily.json
- * 缺失或过期时也会就地现算一份）。
+ * 推荐语有两条路，写进 daily.json 的字段都是 blurb：
+ *   1. **模板**（src/lib/blurb.ts 的 buildDailyBlurb）—— 从当天曲目的元数据算出来，纯函数，
+ *      前端在产物缺失或过期时也现算同一份，所以这条路永远可用、永远一致。
+ *   2. **模型**（配了 AI_API_KEY 才走）—— 事实清单由同一个 blurbFacts() 给出，只是措辞交给
+ *      模型写成文艺随笔。调用失败、返回空、长度离谱时一律退回模板，不会让当天的产物开天窗。
+ *   产物里另记一个 blurbFrom: 'ai' | 'template'，方便回头查某天的文案是谁写的。
  *
  * 用法：
  *   pnpm daily                     生成今天的
  *   pnpm daily --date 2026-09-18   指定日期（补生成 / 调试）
  *   pnpm daily --size 8            改当天首数
+ *   pnpm daily --no-ai             强制用模板文案（不调模型、不花额度）
  *   pnpm daily --dry               只打印，不写文件
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadTs } from './load-ts.mjs'
+import { loadEnv } from './lib/env.mjs'
+import { aiConfig, chat } from './lib/ai.mjs'
+import { BLURB_SYSTEM, buildBlurbUser } from './lib/blurb-prompt.mjs'
 
 // 复用前端那份规则（buildDaily / isEmbyStreamUrl 都是浏览器与脚本共用的纯函数）。
 // 不能直接 `import '../src/lib/*.ts'`：Node 的类型擦除要 >= 22.18 才默认开启，
@@ -36,6 +42,17 @@ const { buildDaily, dailySubtitle, dateKey } = await loadTs(
   new URL('../src/lib/daily.ts', import.meta.url),
 )
 const { isEmbyStreamUrl } = await loadTs(new URL('../src/lib/emby.ts', import.meta.url))
+// 事实与文本整理：与模板路同一个 blurbFacts()，两边才不会对「谁是出场最多的歌手」各说各话
+const { blurbFacts, tidyBlurb, artistDisplay } = await loadTs(
+  new URL('../src/lib/blurb.ts', import.meta.url),
+)
+
+/**
+ * 模型文案的长度闸门。提示词里要求 60~120 字；这里放宽到区间外一截再拒，
+ * 宁可退回模板，也不把一篇长文塞进歌单标题下面（那段位置最多容三行）。
+ */
+const BLURB_MIN = 30
+const BLURB_MAX = 220
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PLAYLIST_PATH = resolve(ROOT, 'public/playlist.json')
@@ -43,6 +60,11 @@ const META_PATH = resolve(ROOT, 'public/meta.json')
 const EMBY_PATH = resolve(ROOT, 'public/emby.json')
 const ARTISTS_PATH = resolve(ROOT, 'public/artists.json')
 const DAILY_PATH = resolve(ROOT, 'public/daily.json')
+
+// 模型配置：密钥只从环境变量 / .env.local 读（CI 是仓库 secret），没配就等于没启用。
+// 与 EMBY_* / LASTFM_* 同一套规矩 —— 缺了不是错误，只是退回模板文案。
+const env = loadEnv(ROOT)
+const ai = aiConfig(env)
 
 /** 支持 --date 2026-09-18 与 --date=2026-09-18 两种写法 */
 const argv = process.argv.slice(2)
@@ -52,6 +74,8 @@ const argVal = (name) => {
   return hit.includes('=') ? hit.slice(hit.indexOf('=') + 1) : argv[argv.indexOf(hit) + 1]
 }
 const dry = argv.includes('--dry')
+/** 强制走模板：想让某天就用模板文案，或者不想再花额度时用 */
+const noAi = argv.includes('--no-ai')
 const wantDate = argVal('date') ?? dateKey()
 // 不给 --size 就走 lib/daily.ts 的自适应默认（上限 30 首、且不超过曲库一半）
 const sizeArg = argVal('size')
@@ -147,10 +171,47 @@ if (existsSync(ARTISTS_PATH)) {
   }
 }
 
+const labelOf = (k) => artistNames[k]?.name
+
 const pick = buildDaily(urls, wantDate, size, {
   metaOf: (u) => info.get(u),
-  labelOf: (k) => artistNames[k]?.name,
+  labelOf,
 })
+
+// —— 可选的一步：让模型把模板文案重写成文艺随笔 ——
+// 只在配了密钥且没加 --no-ai 时走。任何失败都只是「少了一次改写」，不影响当天产物。
+let blurb = pick.blurb
+let blurbFrom = 'template'
+if (!ai.enabled) {
+  console.log(`推荐语用模板生成（未启用模型：${ai.reason}）`)
+} else if (noAi) {
+  console.log('推荐语用模板生成（--no-ai）')
+} else {
+  const items = pick.urls.map((u) => {
+    const m = info.get(u) ?? {}
+    // 歌手名过一遍归一（曲库里繁简混写），曲名与专辑名照原样 —— 与界面显示一致
+    return { title: m.title, artist: artistDisplay(m.artist), album: m.album, year: m.year }
+  })
+  // 事实清单与模板路同源，模型的「出场最多的歌手」不会和模板数出两个答案
+  const facts = blurbFacts(items, { labelOf })
+  console.log(`\n调用模型 ${ai.model}（${ai.baseUrl}）生成推荐语…`)
+  const r = await chat(ai, {
+    system: BLURB_SYSTEM,
+    user: buildBlurbUser({ date: pick.date, items, facts }),
+  })
+  const text = tidyBlurb(r.text)
+  if (!r.text) {
+    console.log(`模型调用失败：${r.error} → 退回模板文案`)
+  } else if (text.length < BLURB_MIN || text.length > BLURB_MAX) {
+    console.log(
+      `模型返回 ${text.length} 字，超出 ${BLURB_MIN}~${BLURB_MAX} 字的范围 → 退回模板文案`,
+    )
+  } else {
+    blurb = text
+    blurbFrom = 'ai'
+    console.log(`模型返回 ${text.length} 字，用时 ${(r.ms / 1000).toFixed(1)}s`)
+  }
+}
 
 const prevText = existsSync(DAILY_PATH) ? readFileSync(DAILY_PATH, 'utf8') : ''
 let prev = null
@@ -159,11 +220,12 @@ try {
 } catch {
   /* 旧文件坏了就当作没有 */
 }
-// 文案也要比：曲目没变但文案生成规则改了时，同样需要落盘
+// 文案也要比：曲目没变但文案生成规则改了时，同样需要落盘。
+// 模型文案每天都不同，所以开了模型之后这里基本天天为假 —— 那正是想要的效果。
 const sameAsPrev =
   prev?.date === pick.date &&
   JSON.stringify(prev?.urls ?? []) === JSON.stringify(pick.urls) &&
-  (prev?.blurb ?? '') === pick.blurb
+  (prev?.blurb ?? '') === blurb
 
 const out = {
   date: pick.date,
@@ -171,7 +233,9 @@ const out = {
   count: pick.urls.length,
   title: pick.title,
   subtitle: pick.subtitle,
-  blurb: pick.blurb,
+  blurb,
+  /** 这段文案是模型写的还是模板算的，回头排查「某天文案怎么这么平」时用 */
+  blurbFrom,
   urls: pick.urls,
 }
 const nextText = JSON.stringify(out, null, 2) + '\n'
@@ -187,7 +251,7 @@ for (const [i, u] of pick.urls.entries()) {
   console.log(`  ${String(i + 1).padStart(3)}. ${m.title || '（未知 · 还没跑过 pnpm label）'}${bits ? `  —  ${bits}` : ''}`)
 }
 
-console.log(`\n推荐语：${pick.blurb || '（元数据不足，这次没有文案）'}`)
+console.log(`\n推荐语（${blurbFrom === 'ai' ? '模型' : '模板'}）：${blurb || '（数据不足，这次没有文案）'}`)
 
 if (dry) {
   console.log(`\n--dry：以上是待写入内容，没有改动 ${DAILY_PATH}`)

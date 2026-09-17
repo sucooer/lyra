@@ -147,7 +147,7 @@ pnpm 10 默认拦截依赖脚本，所以已在 `pnpm-workspace.yaml` 的 `onlyB
 
 - 相邻两天完全不重样（首数取曲库的一半，轮换段首尾相接 —— 16 首时今天 8 首、明天另外 8 首）
 - 同一天在任何设备、刷新多少次都是同一份（纯函数，种子只有日期和直链）
-- 首数默认不超过**曲库的一半**、上限 12 首；曲库超过 24 首后固定 12 首
+- 首数默认不超过**曲库的一半**、上限 30 首；曲库超过 60 首后固定 30 首
 
 **谁来生成**：`.github/workflows/daily.yml` 每天北京 00:05 跑一次
 `scripts/gen-daily.mjs`，把当天的清单写进 `public/daily.json` 并提交，
@@ -161,11 +161,39 @@ pnpm 10 默认拦截依赖脚本，所以已在 `pnpm-workspace.yaml` 的 `onlyB
 pnpm daily                      # 生成今天的（加完新歌想当天就带上，跑一次即可）
 pnpm daily --date 2026-09-18    # 补指定日期
 pnpm daily --size 6             # 改当天首数
+pnpm daily --no-ai              # 强制用模板文案，不调模型
 pnpm daily --dry                # 只打印不写文件
 ```
 
 改文案或换歌单 id 在 `lib/daily.ts` 顶部（`DAILY_ID` / `DAILY_TITLE`）；
 `playlists.json` 里手写同 id 的定义会被每天生成的这份覆盖。
+
+### 推荐语
+
+歌单页标题下面那段话，写在 `daily.json` 的 `blurb` 里，有两条产出路径：
+
+- **模板**（`src/lib/blurb.ts`）—— 从当天曲目的年份、歌手阵容、专辑、时长里算出来。
+  它是**纯函数**，所以前端在 `daily.json` 缺失或过期时能就地现算出逐字一致的一份。
+- **模型**（配了 `AI_API_KEY` 才走）—— 事实清单由同一个 `blurbFacts()` 给出，
+  措辞交给模型写成一段文艺随笔。提示词在 `scripts/lib/blurb-prompt.mjs`。
+
+**模型写的文案不做跨环境复现**，所以只在 cron 侧生成、写进产物；前端那条兜底路径永远走模板。
+调用失败、返回空、长度超出 30~220 字，都自动退回模板文案，当天不会开天窗。
+产物里另记一个 `blurbFrom: 'ai' | 'template'`，方便回头查某天的文案是谁写的。
+
+模型返回的文本会过一遍 `tidyBlurb()`：摘掉 markdown 痕迹、整段引号、「推荐语：」这类小标题、
+表情符号，压平换行，再补中英之间的空格 —— 模板与模型两条路的产出形态因此一致。
+
+```bash
+# 本地想试真接口：写进 .env.local
+AI_API_KEY=sk-…
+AI_BASE_URL=https://api.deepseek.com/v1   # 任何 OpenAI 兼容根路径
+AI_MODEL=deepseek-chat
+```
+
+⚠️ 本机 bash 通常出不了外网，真接口那条路实际由 GitHub Actions 跑（仓库 Settings →
+Secrets and variables → Actions 里加 `AI_API_KEY`，`AI_BASE_URL` / `AI_MODEL` 可选）。
+本地验收用 mock 服务即可：`gen-daily.mjs` 只认这三样，把 `AI_BASE_URL` 指到本地就能全链路走通。
 
 ## 接入 Emby 音乐库
 

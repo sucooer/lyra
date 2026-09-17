@@ -3,6 +3,8 @@ name: 每日推荐
 # 每天生成一份当天的「每日推荐」并提交，部署平台收到提交后重新构建。
 # 顺带同步 Emby 曲库与歌单（新歌、新歌单、新封面），前提是仓库里配了
 # EMBY_URL / EMBY_API_KEY 两个 secret —— 没配就跳过，只用已有快照。
+# 推荐语还可以交给模型写成文艺随笔，前提是配了 AI_API_KEY（见下面的步骤说明）；
+# 没配也一样能跑，只是推荐语由模板算出来。
 #
 # 时间：cron 只认 UTC，16:05 UTC = 北京 00:05 —— 错开整点是因为 GitHub 的
 # 定时任务在整点排队最严重，经常延迟十几分钟到一小时。
@@ -62,7 +64,15 @@ jobs:
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
         run: node scripts/gen-artists.mjs
 
+      # 配了 AI_* 就顺手让模型把推荐语重写成一段文艺随笔；没配、或调用失败（含超时），
+      # 脚本自己退回模板文案，所以这里不用加 if。base_url 与 model 不是机密，
+      # 写成 `secrets.X || vars.X` 让两种都认，省得纠结该放 secrets 还是 variables。
+      # 密钥只活在这一步的环境里，不进任何产物 —— 与 EMBY_API_KEY 同理。
       - name: 生成 public/daily.json
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY || vars.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL || vars.AI_BASE_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL || vars.AI_MODEL }}
         run: node scripts/gen-daily.mjs
 
       - name: 提交并推送
