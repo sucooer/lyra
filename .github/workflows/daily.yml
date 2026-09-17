@@ -45,10 +45,10 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      # Emby 侧的新歌 / 新歌单靠这一步进仓库。没配 secret 就整步跳过，
-      # 沿用仓库里已有的 emby.json 快照（gen-emby.mjs 自己的行为一致）。
+      # Emby 侧的新歌 / 新歌单靠这一步进仓库。没配 secret 时脚本自己打印一句
+      # 「跳过 Emby 同步」并沿用已有快照，所以这里不用加 if —— 顺带避开了
+      # step 级 if 里读不到 secrets 上下文的限制（那会直接让 workflow 解析失败）。
       - name: 同步 Emby 曲库与歌单
-        if: ${{ secrets.EMBY_URL != '' && secrets.EMBY_API_KEY != '' }}
         env:
           EMBY_URL: ${{ secrets.EMBY_URL }}
           EMBY_API_KEY: ${{ secrets.EMBY_API_KEY }}
