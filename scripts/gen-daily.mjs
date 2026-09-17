@@ -133,14 +133,21 @@ const manualCount = urls.length
  *
  * 顺序必须与前端 store 装载时一致：手工曲库在前、Emby 在后、按直链去重取先出现的。
  * 否则这里预生成的清单会和前端现算的那份不是同一批歌 —— 而两者本该逐字一致
- * （见 lib/daily.ts 开头）。emby.json 不存在时只是没有这部分，不算错误。
+ * （见 lib/daily.ts 开头：曲库集合差一首，周期长度与相位就整体错位）。
+ *
+ * 那几道校验（isEmbyStreamUrl / 必须是对象 / title 必须是字符串）**必须与
+ * src/lib/emby.ts 的 parseTracks 逐条对齐** —— 前端就是按那三道筛的，
+ * 这里少筛一条，两边算出的曲库规模就可能差几首。emby.json 不存在时只是没有这部分，不算错误。
  */
 let embyCount = 0
 if (existsSync(EMBY_PATH)) {
   try {
     const emby = JSON.parse(readFileSync(EMBY_PATH, 'utf8'))
     for (const [url, meta] of Object.entries(emby?.tracks ?? {})) {
-      if (!isEmbyStreamUrl(url) || info.has(url)) continue
+      if (!isEmbyStreamUrl(url)) continue
+      if (!meta || typeof meta !== 'object' || Array.isArray(meta)) continue
+      if (typeof meta.title !== 'string') continue
+      if (info.has(url)) continue
       info.set(url, {
         title: meta?.title ?? '',
         artist: meta?.artist ?? '',

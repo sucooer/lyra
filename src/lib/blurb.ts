@@ -51,7 +51,7 @@ export interface BlurbFacts {
   /** 不区分大小写的去重专辑数 */
   albumCount: number
   /** 出现次数最多的专辑（并列时按名字定序，保证任何环境选出的都是同一张） */
-  topAlbum: { name: string; n: number } | null
+  topAlbum: { name: string; n: number; label: string } | null
   /** 不同歌手数（按身份键合并，联名每位各计一次） */
   distinctArtists: number
   /** 出现最多的歌手：身份键、展示名、曲目数 */
@@ -214,7 +214,10 @@ export function blurbFacts(tracks: BlurbMeta[], opts?: BlurbOptions): BlurbFacts
     else albums.set(name.toLowerCase(), { name, n: 1 })
   }
   // 出现次数相同时按名字定序，保证任何环境选出的都是同一张
-  const topAlbum = [...albums.values()].sort((a, b) => b.n - a.n || (a.name < b.name ? -1 : 1))[0] ?? null
+  const top = [...albums.values()].sort((a, b) => b.n - a.n || (a.name < b.name ? -1 : 1))[0] ?? null
+  // label 是「已经带好书名号」的展示文本：曲库里有「《惡作劇之吻》電視原聲帶」这种
+  // 名字里自带书名号的专辑，无条件再包一层就会写出 《《…》】》来。
+  const topAlbum = top ? { ...top, label: top.name.includes('《') ? top.name : `《${top.name}》` } : null
 
   // 歌手：按身份键合并（繁简 / 异写 / 联名都算同一个人），联名曲每位各计一次
   const artistN = new Map<string, number>()
@@ -374,11 +377,11 @@ export function buildDailyBlurb(tracks: BlurbMeta[], date: string, opts?: BlurbO
     // 专辑名太长（曲库里真有「Silence: Music - Harmony - Inspiration (With Sounds
     // From Nature)」这种）时不点名，否则一句话全被名字占掉
     extras.push(
-      f.topAlbum.name.length > 18
+      f.topAlbum.label.length > 18
         ? [`有${f.topAlbum.n}首来自同一张专辑。`, `其中${f.topAlbum.n}首来自同一张专辑。`]
         : [
-            `《${f.topAlbum.name}》出现了${f.topAlbum.n}次。`,
-            `有${f.topAlbum.n}首来自同一张《${f.topAlbum.name}》。`,
+            `${f.topAlbum.label}出现了${f.topAlbum.n}次。`,
+            `有${f.topAlbum.n}首来自同一张${f.topAlbum.label}。`,
           ],
     )
   }
