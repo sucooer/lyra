@@ -266,10 +266,16 @@ function mkBio(p, text, lang) {
 }
 
 /**
+ * 判定「算得上简介」的下限。中文维基有些条目（胡彦斌、周传雄）导言就一两句，
+ * 55 字左右但信息准确；定太高会把它们一起丢掉。
+ */
+const MIN_BIO = 40
+
+/**
  * 从 query.pages 里挑一条能当简介的。
  * generator=search 的结果带 index（相关性排序），精确查询没有，按返回顺序处理。
- * 只有标题能与歌手名对上（相等，或互相包含）才算命中 —— 搜索会返回一堆同名
- * 或沾边的条目，不校验就会把「徐良（明朝人物）」的简介安到歌手头上。
+ * 只有标题能与歌手名对上才算命中 —— 搜索会返回一堆同名或沾边的条目，
+ * 不校验就会把「徐良（明朝人物）」的简介安到歌手头上。
  */
 function pickBio(j, name, lang) {
   const pages = Object.values(j?.query?.pages ?? {})
@@ -279,9 +285,12 @@ function pickBio(j, name, lang) {
   for (const p of pages) {
     if (p.missing !== undefined || !p.extract) continue
     const text = String(p.extract).trim()
-    if (text.length < 60 || isDisambig(p, text)) continue
+    if (text.length < MIN_BIO || isDisambig(p, text)) continue
     const title = normName(p.title)
     if (title === want) return mkBio(p, text, lang)
+    // 繁简在 normName 眼里是两个名字（曲库写「胡彦斌」，条目叫「胡彥斌」），
+    // 但导言几乎总以本人名字开头，拿它兜一道，免得整个条目被误杀。
+    if (normName(text.slice(0, want.length + 4)).includes(want)) return mkBio(p, text, lang)
     if (!loose && (title.includes(want) || want.includes(title))) loose = mkBio(p, text, lang)
   }
   return loose
@@ -321,7 +330,7 @@ async function restBio(title, lang) {
   )
   if (!j || j.type === 'disambiguation' || j.type === 'no-extract') return null
   const text = String(j.extract ?? '').trim()
-  if (text.length < 60) return null
+  if (text.length < MIN_BIO) return null
   return { bio: text, url: j.content_urls?.desktop?.page }
 }
 
