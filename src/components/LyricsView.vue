@@ -78,13 +78,13 @@ onBeforeUnmount(() => cancelAnimationFrame(animId))
       <div
         v-for="(line, i) in lyrics"
         :key="i"
-        class="lyric-line font-bold leading-snug cursor-pointer origin-left transition-all duration-500 ease-out will-change-transform"
+        class="lyric-line font-bold leading-snug cursor-pointer transition-all duration-500 ease-out"
         :class="
           i === activeIndex
-            ? 'text-np-fg scale-110 md:scale-125'
+            ? 'text-np-fg text-[24px] md:text-[32px]'
             : i < activeIndex
-              ? 'text-np-fg/30 scale-100'
-              : 'text-np-fg/35 scale-100 hover:text-np-fg/60'
+              ? 'text-np-fg/30 text-[20px] md:text-[26px]'
+              : 'text-np-fg/35 text-[20px] md:text-[26px] hover:text-np-fg/60'
         "
         @click="jump(line.time)"
       >
@@ -93,7 +93,7 @@ onBeforeUnmount(() => cancelAnimationFrame(animId))
     </template>
     <div v-else class="text-np-muted text-base pt-20 text-center select-none">
       <template v-if="player.currentTrack?.plainLyrics">
-        <pre class="whitespace-pre-wrap text-left text-sm leading-relaxed font-sans">{{ player.currentTrack.plainLyrics }}</pre>
+        <pre class="whitespace-pre-wrap text-left text-base leading-relaxed font-sans">{{ player.currentTrack.plainLyrics }}</pre>
       </template>
       <template v-else>暂无歌词</template>
     </div>
