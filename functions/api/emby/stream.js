@@ -85,6 +85,23 @@ export async function onRequest(context) {
   // 诊断用：非 2xx 时能直接看出上游是谁（不含密钥）
   if (!resp.ok) out.set('x-emby-upstream', upstreamOrigin)
 
+  // Cloudflare 的出站 fetch 不允许以「裸 IP」为目标：请求根本出不了 CF 网络，
+  // 会被边缘按 Direct IP Access 拦下，回 403 + 纯文本 "error code: 1003"
+  // （实测该 IP 的所有端口都这样，与目标服务无关；域名形态则正常出站）。
+  // 撞上时把原因讲清楚，别让线上只剩一个莫名其妙的 403。
+  if (resp.status === 403) {
+    const text = await resp.text()
+    if (text.includes('error code: 1003')) {
+      return new Response(
+        'EMBY_URL 不能是裸 IP：Cloudflare 不允许出站直连 IP（上游回 error code: 1003）。' +
+          '请给服务器解析一个域名（A 记录指向服务器 IP，务必「仅 DNS」/灰云，不要开 Cloudflare 代理），' +
+          '然后把 EMBY_URL 改成 http://<该域名>:8096',
+        { status: 502, headers: CORS },
+      )
+    }
+    return new Response(text, { status: resp.status, statusText: resp.statusText, headers: out })
+  }
+
   return new Response(resp.body, {
     status: resp.status,
     statusText: resp.statusText,

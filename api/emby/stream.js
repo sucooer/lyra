@@ -74,6 +74,22 @@ export default async function handler(req, res) {
   // 诊断用：非 2xx 时能直接看出上游是谁（不含密钥）
   if (!resp.ok) res.setHeader('x-emby-upstream', upstreamOrigin)
 
+  // 与 functions/api/emby/stream.js 保持一致：Vercel 出站没有这个限制，
+  // 但同一份错误文案在两条线上都能出现，保持行为对齐。
+  if (resp.status === 403) {
+    const text = await resp.text()
+    if (text.includes('error code: 1003')) {
+      res.status(502).send(
+        'EMBY_URL 不能是裸 IP：Cloudflare 不允许出站直连 IP（上游回 error code: 1003）。' +
+          '请给服务器解析一个域名（A 记录指向服务器 IP，务必「仅 DNS」/灰云，不要开 Cloudflare 代理），' +
+          '然后把 EMBY_URL 改成 http://<该域名>:8096',
+      )
+      return
+    }
+    res.send(text)
+    return
+  }
+
   if (!resp.body) {
     res.end()
     return
