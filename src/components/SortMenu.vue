@@ -65,7 +65,7 @@ onBeforeUnmount(() => {
     <transition name="sort">
       <div
         v-if="open"
-        class="absolute right-0 top-full mt-2 z-30 min-w-[176px] rounded-xl bg-solid shadow-xl border border-line py-1.5"
+        class="absolute right-0 top-full mt-2 z-30 min-w-[176px] rounded-xl bg-app/95 backdrop-blur-2xl shadow-xl border border-line py-1.5"
       >
         <button
           data-sort-option="default"
