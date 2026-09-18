@@ -75,14 +75,15 @@ watch(activeView, () => (open.value = false))
     </button>
 
     <Transition name="library-panel">
+      <!-- 宽度用 w-fit 跟着内容走，别写死 px：菜单文案一改，写死的宽度就留一大块空白 -->
       <div
         v-if="open"
         data-library-panel
-        class="absolute right-0 top-full mt-2 z-50 w-[176px] rounded-2xl capsule-panel p-1.5 text-left"
+        class="absolute right-0 top-full mt-2 z-50 w-fit grid gap-0.5 rounded-2xl capsule-panel p-1.5 text-left"
       >
         <button
           data-library-artists
-          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left"
+          class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left whitespace-nowrap"
           @click="choose(openArtists)"
         >
           <!-- 人像：歌手 -->
@@ -99,12 +100,12 @@ watch(activeView, () => (open.value = false))
             <circle cx="12" cy="8" r="3.5" />
             <path d="M5.2 19.6c0-3.1 3-5.2 6.8-5.2s6.8 2.1 6.8 5.2" />
           </svg>
-          <span class="text-[14px] font-medium truncate">歌手</span>
+          <span class="text-[14px] font-medium">歌手</span>
         </button>
 
         <button
           data-library-albums
-          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left"
+          class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left whitespace-nowrap"
           @click="choose(openAlbums)"
         >
           <!-- 唱片：专辑 -->
@@ -119,7 +120,7 @@ watch(activeView, () => (open.value = false))
             <circle cx="12" cy="12" r="8.2" />
             <circle cx="12" cy="12" r="2.6" />
           </svg>
-          <span class="text-[14px] font-medium truncate">专辑</span>
+          <span class="text-[14px] font-medium">专辑</span>
         </button>
       </div>
     </Transition>
