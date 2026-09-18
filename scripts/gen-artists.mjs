@@ -54,7 +54,7 @@ const REFRESH_DAYS = 30
  * 否则「已经有简介就跳过」的增量判断会让老数据永远停在旧规则上
  * （比如后来才发现中文维基该带 variant=zh-cn，不重抓就一直是那批名字对不上的）。
  */
-const BIO_VERSION = 2
+const BIO_VERSION = 3
 /** 单个请求超时：网络不通时别把构建拖死 */
 const TIMEOUT = 12000
 /** 并发：抓的都是第三方站点，别开太高 */
@@ -309,7 +309,10 @@ function pickBio(j, name, lang) {
     // 繁简在 normName 眼里是两个名字（曲库写「胡彦斌」，条目叫「胡彥斌」），
     // 但导言几乎总以本人名字开头，拿它兜一道，免得整个条目被误杀。
     if (normName(text.slice(0, want.length + 4)).includes(want)) return mkBio(p, text, lang)
-    if (!loose && (title.includes(want) || want.includes(title))) loose = mkBio(p, text, lang)
+    // 松匹配只对足够长的名字开放：短名字（如「とた」）会子串撞上单字音节词条
+    // （日文维基里「と」= 假名音节），把无关简介安到歌手头上。名字 ≥3 字才允许。
+    if (!loose && want.length >= 3 && title.length >= 2 && (title.includes(want) || want.includes(title)))
+      loose = mkBio(p, text, lang)
   }
   return loose
 }
