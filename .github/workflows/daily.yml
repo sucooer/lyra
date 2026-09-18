@@ -102,6 +102,29 @@ jobs:
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
         run: node scripts/gen-artists.mjs
 
+      # 模型超时是最难自查的一类问题：日志只有一句「超时」，分不清是 runner 出网被挡、
+      # 地址写错、还是模型真的慢。先用 curl 探一次把范围缩到具体原因：
+      # 000 = 连不上（多半是 runner 在境外、访问不到国内接口）；401/403 = 通但密钥不对；
+      # 400 = 通、参数或模型名有问题；200 = 正常。20 秒封顶，不拖慢流程。
+      - name: 检查 AI 接口连通性
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY || vars.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL || vars.AI_BASE_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL || vars.AI_MODEL }}
+        run: |
+          if [ -z "$AI_API_KEY" ]; then echo "未配置 AI_API_KEY，跳过探测（推荐语走模板）"; exit 0; fi
+          base="${AI_BASE_URL:-https://api.deepseek.com/v1}"
+          host=$(printf '%s' "$base" | sed -E 's#^[a-zA-Z]+://([^/:]+).*#\1#')
+          model="${AI_MODEL:-deepseek-chat}"
+          echo "目标：$host  模型：$model"
+          code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' -X POST "${base%/}/chat/completions" \
+                  -H "Authorization: Bearer $AI_API_KEY" -H 'Content-Type: application/json' \
+                  -d "{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}") || code=000
+          echo "HTTP 状态码：$code"
+          if [ "$code" = "000" ]; then
+            echo "::warning title=AI 接口连不上::GitHub Actions 的 runner 在境外，访问不到 $host，推荐语会退回模板。换成境外可达的服务（DeepSeek / OpenAI / SiliconFlow 等），或设 AI_TIMEOUT_MS 放宽超时。"
+          fi
+
       # 配了 AI_* 就顺手让模型把推荐语重写成一段文艺随笔；没配、或调用失败（含超时），
       # 脚本自己退回模板文案，所以这里不用加 if。base_url 与 model 不是机密，
       # 写成 `secrets.X || vars.X` 让两种都认，省得纠结该放 secrets 还是 variables。
