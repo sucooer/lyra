@@ -12,7 +12,9 @@
     "artists": "node scripts/gen-artists.mjs",
     "t2s": "node scripts/gen-t2s.mjs",
     "daily": "node scripts/gen-daily.mjs",
-    "label": "node scripts/label-playlist.mjs"
+    "label": "node scripts/label-playlist.mjs",
+    "lastfm:auth": "node scripts/lastfm-auth.mjs",
+    "lastfm:selftest": "node scripts/lastfm-selftest.mjs"
   },
   "dependencies": {
     "music-metadata": "^11.15.0",

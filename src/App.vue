@@ -4,6 +4,7 @@ import { usePlayerStore } from './stores/player'
 import { setupShortcuts } from './lib/shortcuts'
 import { initTheme, cycleTheme, themeMode, resolvedDark, themeLabel } from './lib/theme'
 import { activePlaylistId, activeAlbum, activeView, goHome, initNav, openSearch } from './lib/nav'
+import { initScrobble } from './lib/scrobble'
 import PlayerBar from './components/PlayerBar.vue'
 import PlayerBarWide from './components/PlayerBarWide.vue'
 import NowPlaying from './components/NowPlaying.vue'
@@ -48,6 +49,8 @@ onMounted(() => {
   player.initAudio()
   player.restore()
   setupShortcuts(player)
+  // 听歌记录同步到 Last.fm（签名在服务端，见 functions/_lib/lastfm.js）
+  initScrobble()
 })
 </script>
 

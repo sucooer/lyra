@@ -16,6 +16,7 @@ import tailwindcss from '@tailwindcss/vite'
 const DEV_ROUTES: Record<string, string> = {
   '/api/emby/stream': 'functions/api/emby/stream.js',
   '/api/proxy': 'functions/api/proxy.js',
+  '/api/lastfm': 'functions/api/lastfm.js',
 }
 
 function apiDevPlugin(): Plugin {
@@ -40,9 +41,19 @@ function apiDevPlugin(): Plugin {
             }
             const headers = new Headers()
             if (req.headers.range) headers.set('range', req.headers.range)
+            if (req.headers['content-type']) headers.set('content-type', req.headers['content-type'])
+            // POST 的请求体也要透传：Last.fm 上报是 POST + JSON body，
+            // 不透传的话本地只能测到「body 是空的」，而且报错方向会完全跑偏。
+            let body: Buffer | undefined
+            if (req.method && req.method !== 'GET' && req.method !== 'HEAD') {
+              const chunks: Buffer[] = []
+              for await (const chunk of req) chunks.push(chunk as Buffer)
+              if (chunks.length) body = Buffer.concat(chunks)
+            }
             const request = new Request(new URL(req.url ?? '/', 'http://localhost'), {
               method: req.method,
               headers,
+              body,
             })
             const resp = await handler!({ request, env })
             res.statusCode = resp.status
