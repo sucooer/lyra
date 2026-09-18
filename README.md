@@ -36,14 +36,25 @@
 
 ## 更新歌单
 
-1. 编辑 `public/playlist.json`，往数组里加音频直链（中文文件名需百分号编码）
-2. `pnpm meta` 解析新增条目（增量，已缓存的跳过）
-3. `pnpm label` 把解析出来的歌名回填进 `playlist.json`，让源文件自己认得出歌
-4. `pnpm build` 构建（只跑 `vite build`；元数据产物由第 2 步生成、随仓库提交）
+**只做一步**：编辑 `public/playlist.json`，往数组里加音频直链（中文文件名需百分号编码），
+提交并推送。剩下的由 GitHub Actions 完成（`.github/workflows/daily.yml`）——
 
-**第 3 步解决的是「加完就忘」**：远程直链多半是随机 token（`Pks0olqo.flac`），
+| 自动做的事 | 步骤 |
+|---|---|
+| 解析直链，取元数据 / 封面 / 内嵌歌词 | `gen-meta.mjs` |
+| 把歌名回填进 `playlist.json`，让源文件自己认得出歌 | `label-playlist.mjs` |
+| 同步 Emby 曲库（配了密钥才跑） | `gen-emby.mjs` |
+| 生成当天的每日推荐 | `gen-daily.mjs` |
+| 把这些产物一起提交并推送 | `chore(data): 曲库与每日推荐同步` |
+
+推送 `playlist.json` 会**立刻触发**一次（不必等每天 00:05），每天 00:05 也会定时跑一次兜底。
+工作流跑完、平台重新构建后新歌就上线了。想手动补跑：Actions → 曲库与每日推荐 → Run workflow。
+
+本地想自己跑一遍也是可以的（`pnpm meta` / `pnpm label`），只是不再是必需步骤。
+
+**回填歌名解决的是「加完就忘」**：远程直链多半是随机 token（`Pks0olqo.flac`），
 光看链接认不出是哪首歌，而能认出歌的元数据只存在于生成物 `meta.json` 里 ——
-于是下次打开源文件想加歌只能靠记忆。`pnpm label` 把歌名补进对象写法：
+于是下次打开源文件想加歌只能靠记忆。`label-playlist.mjs` 把歌名补进对象写法：
 
 `"https://.../Pks0olqo.flac"` → `{ "url": "https://.../Pks0olqo.flac", "title": "知足", "artist": "五月天" }`
 
@@ -75,9 +86,10 @@ tag 后来被修正的情况用 `--force` 显式刷新）、**保持顺序**（�
 覆写是**在前端显示时合并**的：改完刷新页面就生效，不必重跑 `gen-meta`。
 两种写法可以混排，纯字符串的旧格式完全不受影响。
 
-`meta.json` / `covers/` / `lyrics/` **随仓库提交**（合计约 860KB）。`meta.json` 同时充当解析缓存，
-入库后部署构建可直接命中、跳过对全部已有曲目的下载与解析（新增条目仍会增量解析），
-所以**加歌后要连同产物一起提交**，否则下次部署得重跑一遍新增部分。
+`meta.json` / `covers/` / `lyrics/` **随仓库提交**（合计约 860KB），由上面的工作流自动生成并推送。
+`meta.json` 同时充当解析缓存，入库后每次运行可直接命中、跳过对已有曲目的下载与解析（新增条目仍会
+增量解析）—— 所以这些产物**必须留在仓库里**，删掉会让下一次运行重新解析整库（十几首也要几分钟，
+几百首会很久）。
 强制全量重跑：`node scripts/gen-meta.mjs --force`（保留已有缓存，只重解析，中途失败不丢其它条目）；
 只重跑某一条：`--only <下标>`；调并发：`--jobs N`（默认 3 首并行，每首内部再并发取 4 块，可用 `--jobs 1` 退回串行）。
 慢在网络而不是解析：单次 Range 请求约 2.8 秒花在建连与回源首字节上，所以脚本用「多首并行 + 一首内多块并发」
@@ -262,9 +274,9 @@ npm run build # 产物在 dist/
 
 Pages 控制台连接仓库：构建命令 `npm run build`，输出目录 `dist`。CORS 代理由 `functions/api/proxy.js` 自动生效。
 
-构建只做一件事：`vite build`。**不要在构建里同步 Emby** —— 数据同步交给 cron（`.github/workflows/daily.yml`）
-与本机的 `pnpm meta` / `pnpm emby`，产物随仓库提交；构建期联网只会多一个挂起点
-（Emby 是裸 IP 时 CF 边缘还会直接回 403 `error code: 1003`）。
+构建只做一件事：`vite build`。**不要在构建里生成任何数据** —— 曲库同步、元数据解析、
+每日推荐全部交给 `.github/workflows/daily.yml`（定时 + 推送 `playlist.json` 触发），产物随仓库提交；
+构建期联网只会多一个挂起点（Emby 是裸 IP 时 CF 边缘还会直接回 403 `error code: 1003`）。
 `functions/api/emby/stream.js` 需要的 `EMBY_URL` / `EMBY_API_KEY` 仍要在 Pages 的环境变量里配
 （**Functions 的环境变量是部署级快照，改完必须重新部署才生效**），但它与构建无关。
 

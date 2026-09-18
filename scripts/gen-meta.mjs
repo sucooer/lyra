@@ -513,9 +513,17 @@ async function main() {
   // 否则 --force 期间中途失败、或与 --only 组合时，残缺缓存会被当成真相写盘，
   // 紧接着的孤儿清理就会把还在用的封面/歌词删掉（实测踩过：一次删掉 25 个文件）。
   let cache = { generatedAt: null, tracks: {} }
+  // 记住读进来的原文：结尾要拿它比对，内容没变就不写盘。
+  // 为什么重要：现在这一步由 GitHub Actions 每天跑，而 generatedAt 每次都是新值 ——
+  // 无条件写的话，就算一首新歌都没有，也会每天产生一个只有时间戳变化的提交，
+  // 顺带触发一次毫无必要的重新构建与部署。
+  let metaTextBefore = null
   if (existsSync(META_OUT)) {
     try {
-      const prev = JSON.parse(await readFile(META_OUT, 'utf8'))
+      // 归一成 LF 再比对：Windows 上 core.autocrlf 会让工作区变成 CRLF，
+      // 不归一的话「原文」与生成结果永远差一个 \r，等于这条保护失效。
+      metaTextBefore = (await readFile(META_OUT, 'utf8')).replace(/\r\n/g, '\n')
+      const prev = JSON.parse(metaTextBefore)
       if (prev && typeof prev.tracks === 'object' && prev.tracks) cache = prev
     } catch {
       /* 缓存损坏则重建 */
@@ -597,8 +605,15 @@ async function main() {
   }
   await Promise.all(Array.from({ length: Math.min(jobs, queue.length) }, parseWorker))
 
-  cache.generatedAt = new Date().toISOString()
-  await writeFile(META_OUT, JSON.stringify(cache, null, 2))
+  // 内容没变就不写盘：generatedAt 每次都是新值，无条件写（或先更新时间戳再比对）会让
+  // Actions 每天产生一个只有时间戳变化的提交，并触发一次毫无必要的重新构建与部署。
+  // 所以先按「旧的时间戳」序列化来比，只有真有内容变化时才刷新时间戳并落盘。
+  if (JSON.stringify(cache, null, 2) === metaTextBefore) {
+    console.log('\n没有新内容（全部命中缓存），meta.json 不动')
+  } else {
+    cache.generatedAt = new Date().toISOString()
+    await writeFile(META_OUT, JSON.stringify(cache, null, 2))
+  }
 
   // 清理的第二道保险：只有「当前所有直链都已解析出条目」时才动手。
   // --only 只解析一条、或部分条目解析失败时，缓存只是真实曲库的一个子集，
