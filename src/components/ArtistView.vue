@@ -66,6 +66,10 @@ const bioSourceLabel = computed(() => {
       return 'Last.fm'
     case 'wikipedia-zh':
       return '维基百科'
+    case 'wikipedia-ja':
+      return '维基百科（日文）'
+    case 'wikipedia-ko':
+      return '维基百科（韩文）'
     case 'wikipedia-en':
       return 'Wikipedia'
     default:

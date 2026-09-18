@@ -4,7 +4,10 @@
  * 这是纯「补充资料」，不参与曲库构成 —— 有哪些歌、属于谁仍由 emby.json / meta.json
  * 决定。这里只补两样运行时拿不到的东西：
  *
- *   1. 歌手简介：Last.fm（配了 LASTFM_API_KEY 才用）→ 维基百科中文 → 英文。
+ *   1. 歌手简介：Last.fm（配了 LASTFM_API_KEY 才用）→ 维基百科中文 → 日文 → 韩文 → 英文。
+ *      中文优先（曲库是简体）；日/韩在英文之前 —— 日本/韩国艺人往往只有母语维基有条目，
+ *      英文维基要么没有要么词条名是罗马音、正文对不上。正文是日语/韩语就原样留存，
+ *      界面照显示（没有合适的机器翻译，宁留原文不硬翻）。
  *      维基先按条目标题精确查，查不到再用全文搜索兜底（舞台名/日文名/带符号的
  *      写法标题对不上，正文搜得到）。
  *      Apple Music 自己的艺人简介已经在 2022 年前后下线了
@@ -403,7 +406,7 @@ async function fetchBio(name) {
     if (r) r = { ...r, source: 'lastfm' }
     else diag.push('lastfm 无')
   }
-  for (const lang of ['zh', 'en']) {
+  for (const lang of ['zh', 'ja', 'ko', 'en']) {
     if (r) break
     const w = await wikiBio(name, lang)
     if (w?.bio) r = { ...w, source: `wikipedia-${lang}` }
