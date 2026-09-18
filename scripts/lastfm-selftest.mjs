@@ -7,7 +7,7 @@
  * 不发任何真实请求，纯本地。
  */
 import { createHash } from 'node:crypto'
-import { md5Hex, signParams, runAction } from '../functions/_lib/lastfm.js'
+import { md5Hex, signParams, runAction, authUrl } from '../functions/_lib/lastfm.js'
 
 const ref = (s) => createHash('md5').update(s, 'utf8').digest('hex')
 
@@ -45,15 +45,38 @@ const got = signParams(params, secret)
 console.log(`  签名 手算=${manual} 实现=${got} ${manual === got ? '✓' : '✗'}`)
 ok = ok && manual === got
 
-// ④ 未配置环境变量时的行为
+// ④ 未授权时的行为：请求里没带 sk → 401（提示去网页上连接）
 const r = await runAction({}, { action: 'scrobble', scrobbles: [{ artist: 'a', track: 't', timestamp: 1 }] })
-console.log(`  未配置环境变量 → HTTP ${r.status} / ${String(r.json.error).slice(0, 40)} ${r.status === 502 && /未配置/.test(r.json.error) ? '✓' : '✗'}`)
-ok = ok && r.status === 502
+console.log(`  未授权（没带 sk）→ HTTP ${r.status} / ${String(r.json.error).slice(0, 30)} ${r.status === 401 ? '✓' : '✗'}`)
+ok = ok && r.status === 401
 
-// ⑤ 入参校验
-const r2 = await runAction({}, { action: 'scrobble', scrobbles: [{ artist: '', track: '' }] })
+// ⑤ 带了 sk 但服务端没配 key/secret → 502 且说明缺什么
+const r5 = await runAction({}, { action: 'scrobble', sk: 'x', scrobbles: [{ artist: 'a', track: 't', timestamp: 1 }] })
+console.log(`  未配置 key/secret → HTTP ${r5.status} / ${String(r5.json.error).slice(0, 30)} ${r5.status === 502 && /未配置/.test(r5.json.error) ? '✓' : '✗'}`)
+ok = ok && r5.status === 502 && /未配置/.test(r5.json.error)
+
+// ⑥ service 端兜底：环境变量里有 LASTFM_SESSION_KEY 时，请求不带 sk 也能走
+const r6 = await runAction({ LASTFM_API_KEY: 'k', LASTFM_API_SECRET: 's', LASTFM_SESSION_KEY: 'sk-from-env' }, { action: 'xx' })
+console.log(`  环境变量兜底 sk → 走到 action 校验（400）而非 401 ${r6.status === 400 ? '✓' : '✗'}`)
+ok = ok && r6.status === 400
+
+// ⑦ 授权地址：必须带 api_key 与回到本站的 cb
+const u1 = authUrl({ LASTFM_API_KEY: 'KEY123' }, 'https://lyra.example.com')
+const u2 = authUrl({}, 'https://lyra.example.com')
+const u3 = authUrl({ LASTFM_API_KEY: 'KEY123' }, 'not-a-url')
+const uOk =
+  !!u1 &&
+  u1.includes('api_key=KEY123') &&
+  u1.includes(encodeURIComponent('https://lyra.example.com/api/lastfm/callback')) &&
+  u2 === null &&
+  u3 === null
+console.log(`  授权地址拼装（含 cb、缺 key/非法 origin 时返回 null）→ ${uOk ? '✓' : '✗'} ${u1}`)
+ok = ok && uOk
+
+// ⑧ 入参校验
+const r2 = await runAction({}, { action: 'scrobble', sk: 'x', scrobbles: [{ artist: '', track: '' }] })
 console.log(`  非法入参 → HTTP ${r2.status} ${r2.status === 400 ? '✓' : '✗'}`)
-const r3 = await runAction({}, { action: '???' })
+const r3 = await runAction({}, { action: '???', sk: 'x' })
 console.log(`  未知 action → HTTP ${r3.status} ${r3.status === 400 ? '✓' : '✗'}`)
 ok = ok && r2.status === 400 && r3.status === 400
 

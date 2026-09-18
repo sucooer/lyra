@@ -17,6 +17,8 @@ const DEV_ROUTES: Record<string, string> = {
   '/api/emby/stream': 'functions/api/emby/stream.js',
   '/api/proxy': 'functions/api/proxy.js',
   '/api/lastfm': 'functions/api/lastfm.js',
+  '/api/lastfm/auth': 'functions/api/lastfm/auth.js',
+  '/api/lastfm/callback': 'functions/api/lastfm/callback.js',
 }
 
 function apiDevPlugin(): Plugin {

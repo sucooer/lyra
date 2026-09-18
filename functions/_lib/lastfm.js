@@ -106,22 +106,25 @@ export function signParams(params, secret) {
 
 const ENDPOINT = 'https://ws.audioscrobbler.com/2.0/'
 
-/** 一次真实的写请求（POST 表单 + api_sig）。永不抛错，失败以 {error} 返回 */
-export async function callLastfm(env, method, params) {
+/**
+ * 只负责「签名 + 发请求」。sk 由调用方放进 params：
+ * 写操作（scrobble / now playing）必须有 sk，而 auth.getSession 反而不带 sk。
+ * 永不抛错，失败以 { error } 返回。
+ */
+export async function signedCall(env, method, params) {
   const apiKey = String(env?.LASTFM_API_KEY ?? '').trim()
   const secret = String(env?.LASTFM_API_SECRET ?? '').trim()
-  const sk = String(env?.LASTFM_SESSION_KEY ?? '').trim()
-  if (!apiKey || !secret || !sk) {
+  if (!apiKey || !secret) {
     return {
       // ⚠️ 不能用 0 当「未配置」的哨兵：调用方是 `if (r?.error)`，0 判假会被漏判成成功。
       // Last.fm 自己的错误码都是正整数，负数留给本地错误。
       error: -2,
       message:
-        'Last.fm 未配置完整：服务端需要 LASTFM_API_KEY / LASTFM_API_SECRET / LASTFM_SESSION_KEY 三个环境变量（session key 用 pnpm lastfm:auth 获取）',
+        'Last.fm 未配置：服务端需要 LASTFM_API_KEY 与 LASTFM_API_SECRET 两个环境变量（CF Pages → Settings → 环境变量，改完要重新部署）',
     }
   }
 
-  const all = { ...params, api_key: apiKey, sk, method }
+  const all = { ...params, api_key: apiKey, method }
   const body = new URLSearchParams({ ...all, api_sig: signParams(all, secret), format: 'json' })
 
   try {
@@ -143,6 +146,31 @@ export async function callLastfm(env, method, params) {
   } catch (e) {
     return { error: -1, message: `请求 Last.fm 失败：${String(e?.message ?? e).slice(0, 160)}` }
   }
+}
+
+/**
+ * 网页授权流程的第一步：拼出那个让用户点「允许」的地址。
+ * 这是纯字符串拼接，不用先要 token —— 网页流程里 token 由 Last.fm 在回调时带回来。
+ * 注意：Last.fm 账号设置里的 Callback URL 字段**必须非空**，否则授权后回到错误页而非本站；
+ * 这里的 cb 参数让我们能精确回到本站（本地 dev 与线上域名不同也不用改设置）。
+ */
+export function authUrl(env, origin) {
+  const apiKey = String(env?.LASTFM_API_KEY ?? '').trim()
+  if (!apiKey) return null
+  const base = String(origin ?? '').trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//.test(base)) return null
+  const cb = `${base}/api/lastfm/callback`
+  return `https://www.last.fm/api/auth/?api_key=${encodeURIComponent(apiKey)}&cb=${encodeURIComponent(cb)}`
+}
+
+/** 第二步：拿回调里的 token 换 session key（token 只能用一次，60 分钟内有效） */
+export async function exchangeToken(env, token) {
+  const t = String(token ?? '').trim()
+  if (!t) return { error: -3, message: '缺少 token' }
+  const r = await signedCall(env, 'auth.getSession', { token: t })
+  const sk = r?.session?.key
+  if (!sk) return { error: r?.error ?? -4, message: r?.message ?? 'Last.fm 没返回 session key' }
+  return { sessionKey: String(sk), user: String(r?.session?.name ?? '') }
 }
 
 /** 单曲 → Last.fm 参数（scrobble 的数组下标由调用方补） */
@@ -167,18 +195,29 @@ function usable(t) {
 
 /**
  * 平台无关的动作层：CF 与 Vercel 的入口都只做「读请求 → 调这里 → 写响应」。
- * body: { action: 'nowplaying' | 'scrobble', now?: Track, scrobbles?: Track[] }
- * 返回 { status, json }
+ *
+ * body: { action: 'nowplaying' | 'scrobble', sk?: string, now?: Track, scrobbles?: Track[] }
+ *
+ * sk 从请求里带（浏览器授权后存在 localStorage）—— 这样环境变量只需要 key 与 secret
+ * 两个，且换账号/换浏览器只要在网页上重新授权，不用改环境变量重新部署。
+ * 仍支持服务端兜底 `LASTFM_SESSION_KEY`（老配置、或想固定成某个账号时用）。
  */
 export async function runAction(env, body) {
   const action = String(body?.action ?? '')
+  const sk = String(body?.sk ?? env?.LASTFM_SESSION_KEY ?? '').trim()
+  if (!sk) {
+    return {
+      status: 401,
+      json: { ok: false, error: '未连接 Last.fm：在站点上点「连接 Last.fm」授权一次即可' },
+    }
+  }
 
   if (action === 'nowplaying') {
     const now = body.now ?? {}
     if (!String(now.artist ?? '').trim() || !String(now.track ?? '').trim()) {
       return { status: 400, json: { ok: false, error: 'now 需要 artist 与 track' } }
     }
-    const r = await callLastfm(env, 'track.updateNowPlaying', trackParams(now, null))
+    const r = await signedCall(env, 'track.updateNowPlaying', { ...trackParams(now, null), sk })
     const ok = !r?.error
     return { status: ok ? 200 : 502, json: { ok, error: ok ? undefined : (r?.message ?? `Last.fm 错误 ${r?.error}`) } }
   }
@@ -189,7 +228,7 @@ export async function runAction(env, body) {
     // 多首合并成一次请求（Last.fm 单次上限 50 首），省往返也省配额
     const params = {}
     list.forEach((t, i) => Object.assign(params, trackParams(t, i)))
-    const r = await callLastfm(env, 'track.scrobble', params)
+    const r = await signedCall(env, 'track.scrobble', { ...params, sk })
     if (r?.error) return { status: 502, json: { ok: false, error: r.message ?? `Last.fm 错误 ${r.error}` } }
     const attr = r?.scrobbles?.['@attr'] ?? {}
     return {

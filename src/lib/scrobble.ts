@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import { splitArtists } from './artists'
 import { trackTitle } from './track'
 import { usePlayerStore, type Track } from '../stores/player'
@@ -10,6 +11,11 @@ import { usePlayerStore, type Track } from '../stores/player'
  *   就等于公开（任何人都能冒充本站往别人的账号写记录）。所以签名只在服务端做，
  *   见 functions/_lib/lastfm.js。
  *
+ * 授权（只需一次，在站点上点按钮完成）：
+ *   点「连接 Last.fm」→ /api/lastfm/auth 给出授权地址 → 用户在 Last.fm 点「允许」
+ *   → 回到 /api/lastfm/callback → 服务端把 token 换成 session key 写进本站 localStorage。
+ *   所以环境变量只需要 key + secret 两个，session key 由浏览器自己持有并随请求带上。
+ *
  * Last.fm 的计入规则（不满足就不会出现在收听记录里，所以本地先判一道）：
  *   实听 ≥ 30 秒，且（实听 ≥ 曲目时长的 50% 或 实听 ≥ 4 分钟）。
  * 上报时机：条件满足的那一刻就报，不等播完 —— 中途关掉页面也不丢。
@@ -19,11 +25,16 @@ import { usePlayerStore, type Track } from '../stores/player'
  */
 
 const QUEUE_KEY = 'lyra.scrobble.queue'
-/** 想关掉：localStorage.setItem('lyra.scrobble', 'off') */
+/** 授权结果：{ sk, user }。sk 只在本浏览器里，不发往别处（请求时带给自己的端点） */
+const SESSION_KEY = 'lyra.lastfm'
+/** 想临时关掉：localStorage.setItem('lyra.scrobble', 'off') */
 const OFF_KEY = 'lyra.scrobble'
 const MIN_SECONDS = 30
 const MAX_SECONDS = 240
 const MAX_QUEUE = 500
+
+/** 已连接的 Last.fm 用户名；空串 = 未连接（给界面用） */
+export const lastfmUser = ref('')
 
 /** 一首待上报的曲目（字段都是 Last.fm 要的形状） */
 interface Scrobble {
@@ -34,12 +45,55 @@ interface Scrobble {
   timestamp: number
 }
 
-function disabled(): boolean {
+interface Session {
+  sk: string
+  user: string
+}
+
+export function readSession(): Session | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null') as Session | null
+    return p && typeof p.sk === 'string' && p.sk ? { sk: p.sk, user: String(p.user ?? '') } : null
+  } catch {
+    return null
+  }
+}
+
+export function disconnectLastfm(): void {
+  try {
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(QUEUE_KEY)
+  } catch {
+    /* ignore */
+  }
+  lastfmUser.value = ''
+}
+
+/** 拉取授权地址并跳过去；失败时把原因交给调用方显示 */
+export async function connectLastfm(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await fetch(`/api/lastfm/auth?origin=${encodeURIComponent(location.origin)}`)
+    const j = (await r.json().catch(() => null)) as { ok?: boolean; authUrl?: string; error?: string } | null
+    if (!r.ok || !j?.authUrl) return { ok: false, error: j?.error ?? `服务端返回 HTTP ${r.status}` }
+    location.href = j.authUrl
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) }
+  }
+}
+
+function killed(): boolean {
   try {
     return localStorage.getItem(OFF_KEY) === 'off'
   } catch {
     return false
   }
+}
+
+/** 能干活的前提：已授权 + 没被手动关掉 */
+function ready(): Session | null {
+  if (killed()) return null
+  return readSession()
 }
 
 function readQueue(): Scrobble[] {
@@ -60,11 +114,13 @@ function writeQueue(q: Scrobble[]): void {
   }
 }
 
-async function post(body: unknown): Promise<{ ok?: boolean; error?: string }> {
+async function post(body: Record<string, unknown>): Promise<{ ok?: boolean; error?: string }> {
+  const s = readSession()
+  if (!s) throw new Error('未连接 Last.fm')
   const r = await fetch('/api/lastfm', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, sk: s.sk }),
   })
   const json = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null
   if (!r.ok) throw new Error(json?.error ?? `HTTP ${r.status}`)
@@ -75,7 +131,7 @@ let flushing = false
 
 /** 把队列里的记录发出去（每批最多 50 首，Last.fm 的单次上限） */
 export async function flushQueue(): Promise<void> {
-  if (flushing || disabled()) return
+  if (flushing || !ready()) return
   flushing = true
   try {
     for (;;) {
@@ -95,6 +151,7 @@ export async function flushQueue(): Promise<void> {
 }
 
 function enqueue(s: Scrobble): void {
+  if (!ready()) return
   const q = readQueue()
   q.push(s)
   writeQueue(q)
@@ -103,6 +160,7 @@ function enqueue(s: Scrobble): void {
 
 /** now playing 只在「此刻」有意义，失败不重试（重试就过时了） */
 async function sendNowPlaying(s: Scrobble): Promise<void> {
+  if (!ready()) return
   try {
     await post({ action: 'nowplaying', now: { ...s, timestamp: undefined } })
   } catch {
@@ -139,6 +197,7 @@ function toScrobble(t: Track, player: ReturnType<typeof usePlayerStore>, timesta
  */
 export function initScrobble(): void {
   const player = usePlayerStore()
+  lastfmUser.value = readSession()?.user ?? ''
 
   let cur: Scrobble | null = null
   let curId = ''

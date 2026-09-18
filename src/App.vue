@@ -14,6 +14,7 @@ import ArtistView from './components/ArtistView.vue'
 import AlbumView from './components/AlbumView.vue'
 import SearchView from './components/SearchView.vue'
 import TrackMenu from './components/TrackMenu.vue'
+import LastfmButton from './components/LastfmButton.vue'
 
 const player = usePlayerStore()
 
@@ -96,6 +97,8 @@ onMounted(() => {
           />
         </svg>
       </button>
+
+      <LastfmButton />
 
       <button
         class="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-fill transition"

@@ -280,36 +280,39 @@ https 页面里会被混合内容策略拦掉。
 所以签名只在服务端（`functions/_lib/lastfm.js`，CF Functions 与 Vercel 两个入口共用同一份），
 和 Emby 取流是同一个思路。
 
-### 配置（一次性）
+### 配置（一次，约两分钟）
 
-1. 到 <https://www.last.fm/api/account/create> 建应用，拿到 **API key** 与 **API secret**
-   （同一个页面都给了；抓歌手简介用的也是这个 key）
-2. 两者写进 `.env.local`，然后跑授权：
-
-   ```bash
-   pnpm lastfm:auth     # 打开提示的地址点「允许」，回车，就会打印 session key
-   ```
-
-3. 把三个变量填进 **CF Pages 与 Vercel 的环境变量**（两边都要，各自独立）：
+1. 到 <https://www.last.fm/api/account/create> 建应用（或复用已有的），页面上有
+   **API key** 与 **API secret** —— 抓歌手简介用的也是这个 key，secret 只有这里给。
+2. 把 Callback URL 一栏填上 `https://你的域名/api/lastfm/callback`
+   （**必须非空**，否则授权后 Last.fm 会把你送到错误页而不是本站）。
+3. 在 **CF Pages → Settings → 环境变量** 里加两个：
 
    | 变量 | 说明 |
    | --- | --- |
    | `LASTFM_API_KEY` | API key |
    | `LASTFM_API_SECRET` | API secret，**只放服务端** |
-   | `LASTFM_SESSION_KEY` | 授权后的会话密钥，不会过期（除非去 Last.fm 撤销应用授权） |
 
-   ⚠️ CF Pages 的 Functions 读的是**部署级快照**，改完环境变量必须**重新部署**才生效；Vercel 同理。
+   ⚠️ Pages 的 Functions 读的是**部署级快照**，加完必须**重新部署**才生效。
+4. 打开站点，点顶栏的**柱状图标**（「连接 Last.fm」）→ 在 Last.fm 点「允许」→
+   自动回到播放器，图标变红即为已连接。**session key 由浏览器自己保存**，
+   所以环境变量只需要上面两个，换账号也只要在网页上重新授权。
+
+> 备选：`pnpm lastfm:auth` 走的是桌面授权流程（终端里跑），拿到 session key 后可以配
+> `LASTFM_SESSION_KEY` 让服务端固定用一个账号（和 Emby 的密钥一样只存服务端）。
+> 网页授权已经足够，这条只在你想「所有人共用同一个账号、且不依赖浏览器存储」时才需要。
 
 ### 行为细节
 
 - **上报时机**：条件满足的那一刻就报，不等播完 —— 中途关掉页面也不丢。时间戳取开始播放的时刻。
 - **离线队列**：上报失败（断网、服务端没配好）就存进 `localStorage` 的 `lyra.scrobble.queue`，
   下次启动或网络恢复时补发，单次最多 50 首。
-- **关掉同步**：`localStorage.setItem('lyra.scrobble', 'off')`。
-- **注意**：session key 是服务端共享的，所以**任何人**打开这个站点播放都会记到你的 Last.fm 账号里。
-  个人自用没问题；若想把站点公开给别人听，建议先关掉同步（见上一行）。
-- 本地开发时 `vite` 会把 `/api/lastfm` 直接交给 `functions/api/lastfm.js` 处理（与线上同一份代码），
-  环境变量从 `.env.local` 读；没配齐时端点会明确回 502 并说明缺哪个变量。
+- **断开同步**：点顶栏那个图标（已连接时会问一句），本地会话与待发队列一起清掉。
+- **临时静音**：`localStorage.setItem('lyra.scrobble', 'off')`。
+- **注意**：若用环境变量固定了 `LASTFM_SESSION_KEY`，则**任何人**打开这个站点播放都会记到那个账号。
+  用网页授权时每条记录只属于「在那个浏览器上点过授权的账号」。
+- 本地开发时 `vite` 会把 `/api/lastfm*` 直接交给 `functions/api/lastfm/**` 处理（与线上同一份代码），
+  环境变量从 `.env.local` 读；没配齐时界面上的按钮会直接把服务端的原因显示出来。
 
 ## 部署
 
