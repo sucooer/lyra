@@ -54,7 +54,7 @@ const REFRESH_DAYS = 30
  * 否则「已经有简介就跳过」的增量判断会让老数据永远停在旧规则上
  * （比如后来才发现中文维基该带 variant=zh-cn，不重抓就一直是那批名字对不上的）。
  */
-const BIO_VERSION = 3
+const BIO_VERSION = 4
 /** 单个请求超时：网络不通时别把构建拖死 */
 const TIMEOUT = 12000
 /** 并发：抓的都是第三方站点，别开太高 */
@@ -305,7 +305,14 @@ function pickBio(j, name, lang) {
     const text = String(p.extract).trim()
     if (text.length < MIN_BIO || isDisambig(p, text)) continue
     const title = normName(p.title)
-    if (title === want) return mkBio(p, text, lang)
+    if (title === want) {
+      // 短名字（如「とた」）标题精确对上了也未必是本人：ko 维基会把「とた」
+      // 重定向到「と」这个假名音节页。所以名字 <3 字时再验一道——导言开头得
+      // 真的提到这个名字，否则跳过这条候选、继续找，宁可不给简介。
+      if (want.length >= 3 || normName(text.slice(0, want.length + 6)).includes(want))
+        return mkBio(p, text, lang)
+      continue
+    }
     // 繁简在 normName 眼里是两个名字（曲库写「胡彦斌」，条目叫「胡彥斌」），
     // 但导言几乎总以本人名字开头，拿它兜一道，免得整个条目被误杀。
     if (normName(text.slice(0, want.length + 4)).includes(want)) return mkBio(p, text, lang)
