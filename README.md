@@ -270,6 +270,47 @@ https 页面里会被混合内容策略拦掉。
 刻意放在**单独目录** —— `gen-meta` 会清理 `public/covers/` 里未被 `meta.json`
 引用的文件，放进去会被当孤儿删掉。
 
+## 同步听歌记录到 Last.fm
+
+播放时自动上报 now playing，并按 Last.fm 的规则计入收听记录（实听 ≥ 30 秒，且
+≥ 时长的 50% 或 ≥ 4 分钟）。上报走本站自己的端点 `POST /api/lastfm`。
+
+**为什么不能前端直接打 Last.fm**：scrobble 的 `api_sig` 必须用 **API secret** 做 md5
+签名，而本站是公开的 —— secret 进前端就等于公开，任何人都能冒充本站往别人的账号写记录。
+所以签名只在服务端（`functions/_lib/lastfm.js`，CF Functions 与 Vercel 两个入口共用同一份），
+和 Emby 取流是同一个思路。
+
+### 配置（一次性）
+
+1. 到 <https://www.last.fm/api/account/create> 建应用，拿到 **API key** 与 **API secret**
+   （同一个页面都给了；抓歌手简介用的也是这个 key）
+2. 两者写进 `.env.local`，然后跑授权：
+
+   ```bash
+   pnpm lastfm:auth     # 打开提示的地址点「允许」，回车，就会打印 session key
+   ```
+
+3. 把三个变量填进 **CF Pages 与 Vercel 的环境变量**（两边都要，各自独立）：
+
+   | 变量 | 说明 |
+   | --- | --- |
+   | `LASTFM_API_KEY` | API key |
+   | `LASTFM_API_SECRET` | API secret，**只放服务端** |
+   | `LASTFM_SESSION_KEY` | 授权后的会话密钥，不会过期（除非去 Last.fm 撤销应用授权） |
+
+   ⚠️ CF Pages 的 Functions 读的是**部署级快照**，改完环境变量必须**重新部署**才生效；Vercel 同理。
+
+### 行为细节
+
+- **上报时机**：条件满足的那一刻就报，不等播完 —— 中途关掉页面也不丢。时间戳取开始播放的时刻。
+- **离线队列**：上报失败（断网、服务端没配好）就存进 `localStorage` 的 `lyra.scrobble.queue`，
+  下次启动或网络恢复时补发，单次最多 50 首。
+- **关掉同步**：`localStorage.setItem('lyra.scrobble', 'off')`。
+- **注意**：session key 是服务端共享的，所以**任何人**打开这个站点播放都会记到你的 Last.fm 账号里。
+  个人自用没问题；若想把站点公开给别人听，建议先关掉同步（见上一行）。
+- 本地开发时 `vite` 会把 `/api/lastfm` 直接交给 `functions/api/lastfm.js` 处理（与线上同一份代码），
+  环境变量从 `.env.local` 读；没配齐时端点会明确回 502 并说明缺哪个变量。
+
 ## 部署
 
 ### Cloudflare Pages
