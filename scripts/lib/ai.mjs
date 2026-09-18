@@ -34,10 +34,17 @@ export function aiConfig(env, { log = console.log } = {}) {
   const model = envValue(env, 'AI_MODEL', 'OPENAI_MODEL') || DEFAULT_MODEL
   const temperature = Number(envValue(env, 'AI_TEMPERATURE')) || 1.15
   const timeoutMs = Number(envValue(env, 'AI_TIMEOUT_MS')) || DEFAULT_TIMEOUT_MS
+  /**
+   * max_tokens 是「本次最多生成多少 token」的输出上限，与模型支持多大上下文无关；
+   * 服务商会拿它跟模型的真实输出上限校验，超出直接 400，所以不能拍脑袋填 1M。
+   * 默认 8192：普通模型写 60~120 字用不了几百 token，而推理类模型会把隐藏思考
+   * 也算进这份预算 —— 1024 的时候实测全部花在思考上、正文为空（finish_reason=length）。
+   */
+  const maxTokens = Number(envValue(env, 'AI_MAX_TOKENS')) || 8192
   if (!envValue(env, 'AI_BASE_URL', 'OPENAI_BASE_URL')) {
     log(`· 未设 AI_BASE_URL，按 DeepSeek 兼容接口处理（${DEFAULT_BASE_URL}）`)
   }
-  return { enabled: true, apiKey: key, baseUrl, model, temperature, timeoutMs }
+  return { enabled: true, apiKey: key, baseUrl, model, temperature, timeoutMs, maxTokens }
 }
 
 /**
@@ -79,7 +86,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
  * 发一次请求。
  * @returns {Promise<{text: string, error: string, ms: number}>} 失败时 text 为空串
  */
-export async function chat(cfg, { system, user, maxTokens = 1024, log = console.log }) {
+export async function chat(cfg, { system, user, maxTokens, log = console.log }) {
   const url = completionsUrl(cfg.baseUrl)
   const body = {
     model: cfg.model,
@@ -88,7 +95,8 @@ export async function chat(cfg, { system, user, maxTokens = 1024, log = console.
       { role: 'user', content: user },
     ],
     temperature: cfg.temperature,
-    max_tokens: maxTokens,
+    // 调用方显式传了就用调用方的，否则用配置里的（环境变量 AI_MAX_TOKENS，默认 8192）
+    max_tokens: maxTokens ?? cfg.maxTokens,
     stream: false,
   }
 
