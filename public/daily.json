@@ -1,11 +1,11 @@
 {
   "date": "2026-09-18",
-  "generatedAt": "2026-09-18T09:14:05.099Z",
+  "generatedAt": "2026-09-18T09:17:54.429Z",
   "count": 30,
   "title": "每日推荐",
   "subtitle": "9月18日 · 30 首 · 每天更新",
-  "blurb": "暖气片上烘着潮湿的袜子，窗外的雪没有要停的意思。手嶌葵的庭园里有光，ClariS 裹着木枯し路过樱树，Spitz 还在等春天。每个声音都带着自己那年的气温，挤进同一间屋子，安静得像赤い糸刚穿过针眼。",
-  "blurbFrom": "ai",
+  "blurb": "34 年的距离：最早 1991，最新 2025。3 首都是 ClariS 的。最长的一首《赤い糸（Single Mix）》有 6 分 10 秒。",
+  "blurbFrom": "template",
   "urls": [
     "/api/emby/stream?id=13209",
     "/api/emby/stream?id=8908",
