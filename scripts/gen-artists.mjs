@@ -359,10 +359,13 @@ async function restBio(title, lang) {
     { as: 'json', quiet: true },
   )
   if (!j || j.type === 'disambiguation' || j.type === 'no-extract') return null
-  // REST 会跟随重定向把「とた」解析到「と」这个假名音节页 —— 必须再验一道
-  // 返回页标题与要查的名字是不是同一个人。simplify 顺带吃掉繁简差异，
-  // 否则无关词条会当成歌手简介。
-  if (simplify(String(j.title ?? '')) !== simplify(title)) return null
+  // REST 会跟随重定向：既要把「とた」这类解析到「と」假名音节页的误配拦掉，
+  // 又不能误杀「高木さん(CV:高桥李依)」→「高桥李依」这种艺名→本名词条的正当重定向。
+  // 判据：解析后的标题与名字（都经 simplify 吃掉繁简/符号）相等或互为子串，且标题至少
+  // 2 字 —— 单字假名（と）不可能是某位歌手的词条。
+  const t = simplify(String(j.title ?? ''))
+  const n = simplify(title)
+  if (t.length < 2 || !(t === n || n.includes(t) || t.includes(n))) return null
   const text = String(j.extract ?? '').trim()
   if (text.length < MIN_BIO) return null
   return { bio: text, url: j.content_urls?.desktop?.page }
