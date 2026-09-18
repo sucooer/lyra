@@ -132,7 +132,7 @@ jobs:
           # 普查一圈常用服务商的可达性（不带密钥，只看能不能建连 —— 401 就算通）。
           # 用途：当前服务商从 runner 出网不通时，从这里挑一个换。
           echo "常用服务商连通性（401/403/400 = 通，000 = 不通）："
-          for u in https://api.deepseek.com https://api.openai.com https://api.siliconflow.cn https://open.bigmodel.cn https://api.moonshot.cn; do
+          for u in https://api.deepseek.com https://api.openai.com https://api.siliconflow.cn https://open.bigmodel.cn https://api.moonshot.cn https://token.sensenova.cn; do
             c=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$u/v1/models" 2>/dev/null) || c=000
             echo "  $u → $c"
           done
