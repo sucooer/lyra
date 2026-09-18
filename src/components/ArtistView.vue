@@ -4,6 +4,8 @@ import { usePlayerStore } from '../stores/player'
 import { goHome, openAlbum } from '../lib/nav'
 import { fmtTime } from '../lib/track'
 import TrackRow from './TrackRow.vue'
+import SortMenu from './SortMenu.vue'
+import { loadSort, saveSort, sortTracks, type SortKey, type SortState } from '../lib/sort'
 
 const props = defineProps<{ name: string }>()
 const player = usePlayerStore()
@@ -21,7 +23,15 @@ const portrait = computed(
   () => albums.value.find((a) => a.cover)?.cover ?? info.value?.albums?.[0]?.cover,
 )
 
-const ids = computed(() => tracks.value.map((t) => t.id))
+const ids = computed(() => orderedTracks.value.map((t) => t.id))
+
+/** 歌手页的排序：没有「歌手」这一项（整页都是他/她），其余与歌单页一致 */
+const ARTIST_SORT_FIELDS: SortKey[] = ['default', 'title', 'album', 'year', 'duration']
+const sort = ref<SortState>(loadSort(`artist.${props.name}`, ARTIST_SORT_FIELDS))
+watch(sort, (s) => saveSort(`artist.${props.name}`, s))
+const orderedTracks = computed(() =>
+  sortTracks(tracks.value, sort.value, { artistLabel: (n) => player.artistLabel(n) }),
+)
 
 /** 进入歌手页即把播放上下文切成这位歌手：之后点任意一首都在他/她的歌里顺序播 */
 watch(
@@ -165,9 +175,12 @@ const bioSourceLabel = computed(() => {
 
     <!-- 曲目 -->
     <section class="mt-8">
-      <h3 class="text-[22px] font-bold tracking-tight mb-2">歌曲</h3>
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-[22px] font-bold tracking-tight">歌曲</h3>
+        <SortMenu v-model="sort" :fields="ARTIST_SORT_FIELDS" />
+      </div>
       <div class="divide-y divide-line border-y border-line">
-        <TrackRow v-for="t in tracks" :key="t.id" :track="t" :artist-link="false" />
+        <TrackRow v-for="t in orderedTracks" :key="t.id" :track="t" :artist-link="false" />
       </div>
     </section>
   </div>

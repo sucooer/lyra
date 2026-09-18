@@ -5,6 +5,8 @@ import { goHome } from '../lib/nav'
 import PlaylistCover from './PlaylistCover.vue'
 import TrackRow from './TrackRow.vue'
 import NowPlayingHint from './NowPlayingHint.vue'
+import SortMenu from './SortMenu.vue'
+import { loadSort, saveSort, sortTracks, type SortKey, type SortState } from '../lib/sort'
 
 const props = defineProps<{ id: string }>()
 const player = usePlayerStore()
@@ -25,8 +27,16 @@ function fmtTotal(sec: number): string {
   return h > 0 ? `${h} 小时 ${m} 分钟` : `${m} 分钟`
 }
 
-const ids = computed(() => collection.value?.tracks.map((t) => t.id) ?? [])
+const ids = computed(() => ordered.value.map((t) => t.id))
 const label = computed(() => collection.value?.def.title ?? '')
+
+/** 歌单的排序：默认原顺序，按歌名/歌手/专辑/年份/时长排，且每个歌单各自记住 */
+const PLAYLIST_SORT_FIELDS: SortKey[] = ['default', 'title', 'artist', 'album', 'year', 'duration']
+const sort = ref<SortState>(loadSort(props.id, PLAYLIST_SORT_FIELDS))
+watch(sort, (s) => saveSort(props.id, s))
+const ordered = computed(() =>
+  sortTracks(collection.value?.tracks ?? [], sort.value, { artistLabel: (n) => player.artistLabel(n) }),
+)
 
 /** 进入歌单即把播放上下文切成该歌单：之后点任意一首都在歌单内顺序播 */
 watch(
@@ -55,16 +65,19 @@ function shuffleAll() {
 const CHUNK = 60
 const shown = ref(CHUNK)
 const visibleTracks = computed(() => {
-  const all = collection.value?.tracks ?? []
+  const all = ordered.value
   // 小歌单直接全给：多渲染那点行数无关痛痒，也免得出现「60 / 62 首」这种别扭的提示
   const n = all.length <= CHUNK * 2 ? all.length : Math.min(all.length, shown.value)
   return all.slice(0, n)
 })
 
-/** 换歌单时回到第一批 */
+/** 换歌单时回到第一批，并读回这个歌单自己记下的排序 */
 watch(
   () => props.id,
-  () => (shown.value = CHUNK),
+  () => {
+    shown.value = CHUNK
+    sort.value = loadSort(props.id, PLAYLIST_SORT_FIELDS)
+  },
 )
 
 const sentinel = ref<HTMLElement | null>(null)
@@ -147,8 +160,13 @@ const playingHere = computed(() => {
       </div>
     </div>
 
+    <!-- 排序：只影响展示顺序，点「默认顺序」随时回到歌单原始排列 -->
+    <div class="mt-7 flex items-center justify-end">
+      <SortMenu v-model="sort" :fields="PLAYLIST_SORT_FIELDS" />
+    </div>
+
     <!-- 曲目列表（分批渲染，见 visibleTracks） -->
-    <div class="mt-7 divide-y divide-line border-y border-line">
+    <div class="mt-2 divide-y divide-line border-y border-line">
       <TrackRow v-for="t in visibleTracks" :key="t.id" :track="t" source="playlist" />
     </div>
     <!-- 哨兵：放在带边框的列表容器之外，免得 divide-y 给它多画一条线 -->
