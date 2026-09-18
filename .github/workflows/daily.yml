@@ -72,6 +72,19 @@ jobs:
       - name: 回填歌名
         run: node scripts/label-playlist.mjs
 
+      # 没配密钥时 gen-emby 会自己跳过 —— 但那样「曲库不更新」是完全静默的，表现为
+      # 线上永远停在仓库快照里那批歌，很容易被当成同步成功。这里显式报一条 warning，
+      # 让它在运行页顶部显示成黄条。密钥只能在这里读（不能放进 step 级 if，那会让
+      # workflow 解析失败），所以判断放在 shell 里做。
+      - name: 检查 Emby 密钥
+        env:
+          EMBY_URL: ${{ secrets.EMBY_URL }}
+          EMBY_API_KEY: ${{ secrets.EMBY_API_KEY }}
+        run: |
+          if [ -z "$EMBY_URL" ] || [ -z "$EMBY_API_KEY" ]; then
+            echo "::warning title=Emby 未同步::缺少 EMBY_URL / EMBY_API_KEY，本次不同步 Emby，曲库维持仓库快照。要自动同步新歌：仓库 Settings → Secrets and variables → Actions 添加这两个 secret，再 Run workflow 一次。"
+          fi
+
       # Emby 侧的新歌 / 新歌单靠这一步进仓库。没配 secret 时脚本自己打印一句
       # 「跳过 Emby 同步」并沿用已有快照，所以这里不用加 if —— 顺带避开了
       # step 级 if 里读不到 secrets 上下文的限制（那会直接让 workflow 解析失败）。

@@ -238,6 +238,13 @@ pnpm emby --dry              # 只打印不落盘
 pnpm emby --limit 30         # 试跑
 ```
 
+**自动同步要把密钥放进仓库 secret**：Settings → Secrets and variables → Actions →
+New repository secret，加 `EMBY_URL` 与 `EMBY_API_KEY`。配好之后每天 00:05 的工作流会
+同步新歌、新封面与新歌词并提交；也可以在 Actions → 曲库与每日推荐 → Run workflow 立刻跑一次。
+**没配的话工作流不会失败，只是静默跳过** —— 表现是线上曲库一直停在仓库快照里的那批歌
+（运行日志里会有黄字提醒）。⚠️ 部署构建**不**做同步（CF Pages 构建有 20 分钟上限，
+4700 首全量同步随时会超时，而且产物不进仓库就无法复现），这条路已经废弃。
+
 密钥在 Emby 后台 → 设置 → 高级 → API 密钥 新建。⚠️ 它**不是只读音乐库的凭证，
 而是整台服务器的完整权限**（含其它媒体库与管理接口），因此只能待在服务端：
 本地放 `.env.local`（`.gitignore` 已排除），线上放 CF Pages / Vercel 的环境变量。
