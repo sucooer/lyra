@@ -114,16 +114,21 @@ jobs:
         run: |
           if [ -z "$AI_API_KEY" ]; then echo "未配置 AI_API_KEY，跳过探测（推荐语走模板）"; exit 0; fi
           base="${AI_BASE_URL:-https://api.deepseek.com/v1}"
+          base="${base%/}"
           host=$(printf '%s' "$base" | sed -E 's#^[a-zA-Z]+://([^/:]+).*#\1#')
           model="${AI_MODEL:-deepseek-chat}"
-          echo "目标：$host  模型：$model"
-          code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' -X POST "${base%/}/chat/completions" \
-                  -H "Authorization: Bearer $AI_API_KEY" -H 'Content-Type: application/json' \
-                  -d "{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}") || code=000
-          echo "HTTP 状态码：$code"
-          if [ "$code" = "000" ]; then
-            echo "::warning title=AI 接口连不上::GitHub Actions 的 runner 在境外，访问不到 $host，推荐语会退回模板。换成境外可达的服务（DeepSeek / OpenAI / SiliconFlow 等），或设 AI_TIMEOUT_MS 放宽超时。"
-          fi
+          echo "目标主机：$host  模型：$model"
+          body="{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}"
+          # 客户端只会拼 base + /chat/completions；再补试 origin + /v1/chat/completions，
+          # 因为不少服务（NVIDIA NIM 等）的兼容入口就挂在 /v1 下 —— 404 往往只是 base 少了 /v1。
+          a=$(curl -s -o /dev/null -m 20 -w '%{http_code} %{time_total}s' -X POST "$base/chat/completions" \
+                -H "Authorization: Bearer $AI_API_KEY" -H 'Content-Type: application/json' -d "$body") || a="000"
+          origin=$(printf '%s' "$base" | sed -E 's#^(https?://[^/]+).*#\1#')
+          b=$(curl -s -o /dev/null -m 20 -w '%{http_code} %{time_total}s' -X POST "$origin/v1/chat/completions" \
+                -H "Authorization: Bearer $AI_API_KEY" -H 'Content-Type: application/json' -d "$body") || b="000"
+          echo "  $base/chat/completions            → $a"
+          echo "  $origin/v1/chat/completions → $b"
+          echo "  （000 = 连不上/超时；404 = 路径不对，改 AI_BASE_URL；401/403 = 密钥问题；200 = 正常）"
 
       # 配了 AI_* 就顺手让模型把推荐语重写成一段文艺随笔；没配、或调用失败（含超时），
       # 脚本自己退回模板文案，所以这里不用加 if。base_url 与 model 不是机密，
