@@ -1,11 +1,11 @@
 {
   "date": "2026-09-18",
-  "generatedAt": "2026-09-18T03:43:22.710Z",
+  "generatedAt": "2026-09-18T04:27:08.160Z",
   "count": 30,
   "title": "每日推荐",
   "subtitle": "9月18日 · 30 首 · 每天更新",
-  "blurb": "灯光泛黄，像多年前剩下来的颜色。孙燕姿的《半句再见》没有说完，苏打绿在《春‧日光》里告别牧神，S.E.N.S.的《Teardrops》从 2009 年滴落下来，Bandari 的《River of Dreams》在远处静静淌着。夜被这些声音撑开了一点。",
-  "blurbFrom": "ai",
+  "blurb": "24 年的距离：最早 1999，最新 2023。4 首都是 Bandari 的。《春‧日光》出现了 2 次。",
+  "blurbFrom": "template",
   "urls": [
     "/api/emby/stream?id=4170",
     "/api/emby/stream?id=2702",
