@@ -129,6 +129,13 @@ jobs:
           echo "  $base/chat/completions            → $a"
           echo "  $origin/v1/chat/completions → $b"
           echo "  （000 = 连不上/超时；404 = 路径不对，改 AI_BASE_URL；401/403 = 密钥问题；200 = 正常）"
+          # 普查一圈常用服务商的可达性（不带密钥，只看能不能建连 —— 401 就算通）。
+          # 用途：当前服务商从 runner 出网不通时，从这里挑一个换。
+          echo "常用服务商连通性（401/403/400 = 通，000 = 不通）："
+          for u in https://api.deepseek.com https://api.openai.com https://api.siliconflow.cn https://open.bigmodel.cn https://api.moonshot.cn; do
+            c=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$u/v1/models" 2>/dev/null) || c=000
+            echo "  $u → $c"
+          done
 
       # 配了 AI_* 就顺手让模型把推荐语重写成一段文艺随笔；没配、或调用失败（含超时），
       # 脚本自己退回模板文案，所以这里不用加 if。base_url 与 model 不是机密，
