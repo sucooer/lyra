@@ -139,6 +139,9 @@ jobs:
           AI_API_KEY: ${{ secrets.AI_API_KEY || vars.AI_API_KEY }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL || vars.AI_BASE_URL }}
           AI_MODEL: ${{ secrets.AI_MODEL || vars.AI_MODEL }}
+          # 免费档的模型（尤其推理类）一次生成经常超过一分钟，60s 默认值几乎必超时。
+          # 客户端本身支持 AI_TIMEOUT_MS，这里显式放宽到 3 分钟；cron 有 20 分钟预算，不怕。
+          AI_TIMEOUT_MS: '180000'
         run: node scripts/gen-daily.mjs
 
       - name: 提交并推送
