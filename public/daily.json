@@ -1,11 +1,11 @@
 {
   "date": "2026-09-18",
-  "generatedAt": "2026-09-18T05:36:33.885Z",
+  "generatedAt": "2026-09-18T06:06:46.114Z",
   "count": 30,
   "title": "每日推荐",
   "subtitle": "9月18日 · 30 首 · 每天更新",
-  "blurb": "24 年的距离：最早 1999，最新 2023。4 首都是 Bandari 的。《春‧日光》出现了 2 次。",
-  "blurbFrom": "template",
+  "blurb": "有些声音适合在夜里辨认。陈奕迅从 2013 年的《Nothing Really Matters》里递来一句感激，苏打绿在 2009 年的《春‧日光》里放走一列春色。孙燕姿的《克卜勒》亮成隔年的灯，Bandari 的《Mist》却还在 1999 年的雾里。它们各自走着各自的时区，偶然在我这里成了同一天的潮汐。",
+  "blurbFrom": "ai",
   "urls": [
     "/api/emby/stream?id=4170",
     "/api/emby/stream?id=2702",
