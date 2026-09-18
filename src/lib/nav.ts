@@ -13,7 +13,7 @@ import { artistKey } from './artists'
  * #/album/<歌手>/<专辑>），静态托管刷新也不会 404。
  */
 
-export type ViewKind = 'home' | 'playlist' | 'artist' | 'album' | 'search'
+export type ViewKind = 'home' | 'playlist' | 'artist' | 'album' | 'search' | 'artists' | 'albums'
 
 /** 复合 key 的分隔符：专辑的归属歌手与专辑名可能都含斜杠，用不可见字符分隔最稳 */
 const SEP = '\u001f'
@@ -105,6 +105,9 @@ function urlFor(v: ViewRef): string {
     const [artist, album] = v.key.split(SEP)
     return `${base}#/album/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`
   }
+  // 两个索引页没有 key（分别是全部歌手 / 全部专辑）
+  if (v.kind === 'artists') return `${base}#/artists`
+  if (v.kind === 'albums') return `${base}#/albums`
   // 搜索词刻意不进 URL：每敲一个字就写一次历史会把返回键淹掉。
   // 词存在 store 里（player.searchQuery），进歌手页再返回时还在。
   if (v.kind === 'search') return `${base}#/search`
@@ -120,6 +123,8 @@ function viewFromUrl(): ViewRef {
   if (m) return { kind: 'artist', key: artistKey(decodeURIComponent(m[1])) }
   m = /^#\/album\/([^/]+)\/(.+)$/.exec(h)
   if (m) return { kind: 'album', key: albumKey(decodeURIComponent(m[1]), decodeURIComponent(m[2])) }
+  if (/^#\/artists\/?$/.test(h)) return { kind: 'artists', key: '' }
+  if (/^#\/albums\/?$/.test(h)) return { kind: 'albums', key: '' }
   if (/^#\/search\/?$/.test(h)) return { kind: 'search', key: '' }
   return { ...HOME }
 }
@@ -237,6 +242,20 @@ export function openArtist(name: string) {
 
 export function openAlbum(artist: string, album: string) {
   open({ kind: 'album', key: albumKey(artist, album) })
+}
+
+/**
+ * 「全部歌手」「全部专辑」两个索引页。
+ *
+ * 它们和别的层一样占一层历史：索引页 → 点某位歌手 → 返回回到索引页，
+ * 而不是一路退回首页（这两个入口就是给「顺着逛」用的）。
+ */
+export function openArtists() {
+  open({ kind: 'artists', key: '' })
+}
+
+export function openAlbums() {
+  open({ kind: 'albums', key: '' })
 }
 
 /**

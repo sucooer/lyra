@@ -13,8 +13,11 @@ import PlaylistView from './components/PlaylistView.vue'
 import ArtistView from './components/ArtistView.vue'
 import AlbumView from './components/AlbumView.vue'
 import SearchView from './components/SearchView.vue'
+import ArtistsView from './components/ArtistsView.vue'
+import AlbumsView from './components/AlbumsView.vue'
 import TrackMenu from './components/TrackMenu.vue'
 import LastfmButton from './components/LastfmButton.vue'
+import LibraryButton from './components/LibraryButton.vue'
 
 const player = usePlayerStore()
 
@@ -39,6 +42,10 @@ const headerTitle = computed(() => {
       return activeAlbum.value?.album ?? '专辑'
     case 'search':
       return '搜索'
+    case 'artists':
+      return '全部歌手'
+    case 'albums':
+      return '全部专辑'
     default:
       return '音乐'
   }
@@ -83,6 +90,10 @@ onMounted(() => {
       <h1 class="flex-1 min-w-0 truncate text-xl lg:text-[17px] font-semibold tracking-tight">
         {{ headerTitle }}
       </h1>
+
+      <!-- 资料库：歌手 / 专辑索引页与歌单的入口。放在搜索左侧，
+           搜索页里也保留（从搜索直接跳去索引） -->
+      <LibraryButton />
 
       <!-- 搜索入口：已经在搜索页就不重复显示（那一页的输入框就在下面） -->
       <button
@@ -133,6 +144,8 @@ onMounted(() => {
           :album="activeAlbum.album"
         />
         <SearchView v-else-if="activeView.kind === 'search'" />
+        <ArtistsView v-else-if="activeView.kind === 'artists'" />
+        <AlbumsView v-else-if="activeView.kind === 'albums'" />
         <Home v-else />
       </main>
       <PlayerBar />
