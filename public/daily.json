@@ -1,11 +1,11 @@
 {
   "date": "2026-09-18",
-  "generatedAt": "2026-09-18T04:54:06.874Z",
+  "generatedAt": "2026-09-18T05:14:09.253Z",
   "count": 30,
   "title": "每日推荐",
   "subtitle": "9月18日 · 30 首 · 每天更新",
-  "blurb": "24 年的距离：最早 1999，最新 2023。4 首都是 Bandari 的。《春‧日光》出现了 2 次。",
-  "blurbFrom": "template",
+  "blurb": "深夜的灯光有点钝。陈奕迅《Nothing Really Matters》里装着二〇一三年，孙燕姿《克卜勒》旁边是二〇一四年。苏打绿《春‧日光》的火车不着急，S.E.N.S.的《透明な音楽》像淋过雨的玻璃。年份隔着年份，声音却都贴着耳朵。",
+  "blurbFrom": "ai",
   "urls": [
     "/api/emby/stream?id=4170",
     "/api/emby/stream?id=2702",
