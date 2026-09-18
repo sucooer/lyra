@@ -298,24 +298,19 @@ const MIN_BIO = 40
 function pickBio(j, name, lang) {
   const pages = Object.values(j?.query?.pages ?? {})
   pages.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-  const want = normName(name)
+  // 用 simplify 而不是 normName：normName 不做繁简转换，条目标题是繁体
+  // （高橋李依）而曲库名字是简体（高桥李依）时对不上，会把本有词条的歌手漏掉。
+  const want = simplify(name)
   let loose = null
   for (const p of pages) {
     if (p.missing !== undefined || !p.extract) continue
     const text = String(p.extract).trim()
     if (text.length < MIN_BIO || isDisambig(p, text)) continue
-    const title = normName(p.title)
-    if (title === want) {
-      // 短名字（如「とた」）标题精确对上了也未必是本人：ko 维基会把「とた」
-      // 重定向到「と」这个假名音节页。所以名字 <3 字时再验一道——导言开头得
-      // 真的提到这个名字，否则跳过这条候选、继续找，宁可不给简介。
-      if (want.length >= 3 || normName(text.slice(0, want.length + 6)).includes(want))
-        return mkBio(p, text, lang)
-      continue
-    }
-    // 繁简在 normName 眼里是两个名字（曲库写「胡彦斌」，条目叫「胡彥斌」），
-    // 但导言几乎总以本人名字开头，拿它兜一道，免得整个条目被误杀。
-    if (normName(text.slice(0, want.length + 4)).includes(want)) return mkBio(p, text, lang)
+    const title = simplify(p.title)
+    if (title === want) return mkBio(p, text, lang)
+    // 导言几乎总以本人名字开头，拿它兜一道 —— 处理「条目标题带消歧义后缀」
+    // 这类 title 对不上的情况（simplify 已抹平繁简与符号）。
+    if (simplify(text.slice(0, want.length + 4)).includes(want)) return mkBio(p, text, lang)
     // 松匹配只对足够长的名字开放：短名字（如「とた」）会子串撞上单字音节词条
     // （日文维基里「と」= 假名音节），把无关简介安到歌手头上。名字 ≥3 字才允许。
     if (!loose && want.length >= 3 && title.length >= 2 && (title.includes(want) || want.includes(title)))
