@@ -217,3 +217,38 @@ body {
     transparent 100%
   );
 }
+
+/*
+ * 歌词行：行高写死成 px，不跟字号走 —— 这样放大/缩小只改字形、不改行高。
+ *
+ * 只有行高恒定还不够：字号一变，**换行点**也会变，卡在边界的句子会在 1 行与 2 行
+ * 之间来回横跳，行高从 1 行变 2 行，把下面所有行推着走（观感就是「字被挤来挤去」）。
+ * 所以每个行框还带一个由组件算出的 inline min-height —— 按该行在**高亮字号**下
+ * 实际占几行来定，短句就是 1 行高（不多占空间），会被高亮撑成两行的长句预留 2 行高。
+ * grid + align-content: center 让单行文本在这个更高的框里垂直居中。
+ */
+:root {
+  --lyric-lh: 32px;
+}
+@media (min-width: 768px) {
+  :root {
+    --lyric-lh: 40px;
+  }
+}
+
+.lyric-line,
+.lyric-measure {
+  line-height: var(--lyric-lh);
+  display: grid;
+  align-content: center;
+}
+
+/* 离屏量尺：与真实行同宽（left/right 对齐容器的 px-6），只用来量高度 */
+.lyric-measure-probe {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
