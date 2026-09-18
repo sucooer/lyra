@@ -54,7 +54,7 @@ const REFRESH_DAYS = 30
  * 否则「已经有简介就跳过」的增量判断会让老数据永远停在旧规则上
  * （比如后来才发现中文维基该带 variant=zh-cn，不重抓就一直是那批名字对不上的）。
  */
-const BIO_VERSION = 4
+const BIO_VERSION = 5
 /** 单个请求超时：网络不通时别把构建拖死 */
 const TIMEOUT = 12000
 /** 并发：抓的都是第三方站点，别开太高 */
@@ -359,6 +359,10 @@ async function restBio(title, lang) {
     { as: 'json', quiet: true },
   )
   if (!j || j.type === 'disambiguation' || j.type === 'no-extract') return null
+  // REST 会跟随重定向把「とた」解析到「と」这个假名音节页 —— 必须再验一道
+  // 返回页标题与要查的名字是不是同一个人。simplify 顺带吃掉繁简差异，
+  // 否则无关词条会当成歌手简介。
+  if (simplify(String(j.title ?? '')) !== simplify(title)) return null
   const text = String(j.extract ?? '').trim()
   if (text.length < MIN_BIO) return null
   return { bio: text, url: j.content_urls?.desktop?.page }
