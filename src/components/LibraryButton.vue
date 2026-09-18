@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { usePlayerStore } from '../stores/player'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { activeView, openAlbums, openArtists } from '../lib/nav'
-import { buildAlbumIndex, buildArtistIndex } from '../lib/search'
 
 /**
  * 顶栏的「资料库」入口：点开是一个面板，里面只放**没有别的入口**的两个维度
  * （全部歌手 / 全部专辑），点进去是索引页。
  *
- * 刻意**不在这里列歌单**：那是「抄一份清单」的思路，歌单一多就必然崩（放不下、也没法维护
+ * 刻意**不在这里写数量、也不写说明文字**：数量（几百上千）对「去哪」这个决定毫无帮助，
+ * 每多一个数字/注释就多一份要跟着曲库变的负担；说明文字更是没人读。行里只留
+ * 「图标 + 名字」——一眼扫到、点进去再说。
+ *
+ * 也刻意**不在这里列歌单**：那是「抄一份清单」的思路，歌单一多就必然崩（放不下、也没法维护
  * 顺序）。面板只放「结构性的入口」，清单类的东西一律各自有页面 —— 歌单在首页就够了；
  * 哪天真多到首页摆不下，就再加一个 `#/playlists` 索引页，那时这里加**一行**入口即可，
  * 而不是往面板里塞列表。
@@ -18,22 +20,9 @@ import { buildAlbumIndex, buildArtistIndex } from '../lib/search'
  * 「歌手 / 专辑没有列表入口」这件事 —— 先用最轻的入口把它补上，确认自己真的会顺着逛，
  * 再决定要不要把它挪进常驻侧栏。
  */
-const player = usePlayerStore()
-
 const open = ref(false)
 /** 面板锚在这个按钮上：窄屏下 header 是普通流（没有定位上下文），不能拿 header 当锚点 */
 const anchor = ref<HTMLElement | null>(null)
-
-/**
- * 面板上那两个数字必须和索引页里看到的一致 —— 所以直接调索引页用的同一个聚合函数，
- * 而不是另写一套统计（差一位数就会让人怀疑页面坏了）。曲库是异步装的，tracks 为空时
- * 先显示占位，等它到齐再算。
- */
-const indexes = computed(() =>
-  player.tracks.length
-    ? { artists: buildArtistIndex(player.tracks), albums: buildAlbumIndex(player.tracks) }
-    : null,
-)
 
 function toggle() {
   open.value = !open.value
@@ -74,7 +63,7 @@ watch(activeView, () => (open.value = false))
       data-library-toggle
       class="w-9 h-9 rounded-full flex items-center justify-center transition"
       :class="open ? 'text-fg bg-fill' : 'text-fg-muted hover:text-fg hover:bg-fill'"
-      title="资料库（歌手 / 专辑 / 歌单）"
+      title="资料库（歌手 / 专辑）"
       aria-label="资料库"
       :aria-expanded="open"
       @click="toggle"
@@ -89,34 +78,48 @@ watch(activeView, () => (open.value = false))
       <div
         v-if="open"
         data-library-panel
-        class="absolute right-0 top-full mt-2 z-50 w-[248px] max-h-[70vh] overflow-y-auto rounded-2xl capsule-panel p-2 text-left"
+        class="absolute right-0 top-full mt-2 z-50 w-[176px] rounded-2xl capsule-panel p-1.5 text-left"
       >
         <button
           data-library-artists
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left"
+          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left"
           @click="choose(openArtists)"
         >
-          <span class="w-7 h-7 shrink-0 rounded-full bg-fill-strong flex items-center justify-center text-[11px] font-semibold tabular-nums">
-            {{ indexes ? indexes.artists.length : '–' }}
-          </span>
-          <span class="min-w-0 flex-1">
-            <span class="block text-[14px] font-medium truncate">全部歌手</span>
-            <span class="block text-[12px] text-fg-muted truncate">按曲目数排，联名两边都算</span>
-          </span>
+          <!-- 人像：歌手 -->
+          <svg
+            viewBox="0 0 24 24"
+            class="w-[17px] h-[17px] shrink-0 text-music"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="8" r="3.5" />
+            <path d="M5.2 19.6c0-3.1 3-5.2 6.8-5.2s6.8 2.1 6.8 5.2" />
+          </svg>
+          <span class="text-[14px] font-medium truncate">歌手</span>
         </button>
 
         <button
           data-library-albums
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left"
+          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-fill transition text-left"
           @click="choose(openAlbums)"
         >
-          <span class="w-7 h-7 shrink-0 rounded-full bg-fill-strong flex items-center justify-center text-[11px] font-semibold tabular-nums">
-            {{ indexes ? indexes.albums.length : '–' }}
-          </span>
-          <span class="min-w-0 flex-1">
-            <span class="block text-[14px] font-medium truncate">全部专辑</span>
-            <span class="block text-[12px] text-fg-muted truncate">年份新的在前</span>
-          </span>
+          <!-- 唱片：专辑 -->
+          <svg
+            viewBox="0 0 24 24"
+            class="w-[17px] h-[17px] shrink-0 text-music"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="8.2" />
+            <circle cx="12" cy="12" r="2.6" />
+          </svg>
+          <span class="text-[14px] font-medium truncate">专辑</span>
         </button>
       </div>
     </Transition>
