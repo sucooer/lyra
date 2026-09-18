@@ -10,6 +10,7 @@ import {
   searchTracks,
   tokensOf,
 } from '../lib/search'
+import { clearSearchHistory, recentSearches, rememberSearch } from '../lib/search-history'
 import TrackRow from './TrackRow.vue'
 import PlaylistCard from './PlaylistCard.vue'
 import ArtistCard from './ArtistCard.vue'
@@ -98,9 +99,26 @@ function onEscape() {
   else goHome()
 }
 
-/** 回车收起手机键盘，好让结果整体露出来 */
+/** 回车收起手机键盘，好让结果整体露出来；顺手把这次搜索记进「最近搜索」 */
 function onEnter() {
+  rememberSearch(player.searchQuery)
   input.value?.blur()
+}
+
+/** 点「最近搜索」里的一条：填回输入框并置顶（重搜一次） */
+function rerun(q: string) {
+  player.searchQuery = q
+  rememberSearch(q)
+}
+
+/**
+ * 取消 = 结束这次搜索：先把词记进历史（不然「取消了就真丢了」），再清空输入框、
+ * 退出搜索页。清空是为了下次进来能直接看到「最近搜索」而不是又回到上次的结果页。
+ */
+function cancel() {
+  rememberSearch(player.searchQuery)
+  clearQuery()
+  goHome()
 }
 
 function focusInput() {
@@ -140,41 +158,54 @@ function onKey(e: KeyboardEvent) {
     <div
       class="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 pt-1 lg:pt-4 pb-3 bg-app"
     >
-      <!-- 搜索框：iOS 上字号必须 ≥16px，否则聚焦时页面会被自动放大 -->
-      <div class="relative w-full lg:max-w-[640px]">
-        <svg
-          viewBox="0 0 24 24"
-          class="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] fill-current text-fg-subtle pointer-events-none"
-        >
-          <path
-            d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-          />
-        </svg>
-        <input
-          ref="input"
-          v-model="player.searchQuery"
-          type="text"
-          enterkeyhint="search"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-          placeholder="歌手、歌曲或专辑"
-          class="w-full h-10 pl-10 pr-10 rounded-xl bg-fill text-[16px] lg:text-[15px] text-fg placeholder:text-fg-subtle outline-none focus:bg-fill-strong transition"
-          @keydown.escape="onEscape"
-          @keydown.enter="onEnter"
-        />
-        <button
-          v-if="player.searchQuery"
-          class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-fg-subtle hover:text-fg hover:bg-fill-strong transition"
-          title="清空"
-          @click="clearQuery"
-        >
-          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current">
+      <!-- 搜索框 + 取消。iOS 上字号必须 ≥16px，否则聚焦时页面会被自动放大 -->
+      <div class="flex items-center gap-2 w-full lg:max-w-[640px]">
+        <!-- 输入框自己一层 relative：放大镜与清空按钮都按「输入框」定位，
+             不能被右侧的取消按钮带着跑 -->
+        <div class="relative flex-1 min-w-0">
+          <svg
+            viewBox="0 0 24 24"
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] fill-current text-fg-subtle pointer-events-none"
+          >
             <path
-              d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm3.5 12.1-1.4 1.4L12 13.4l-2.1 2.1-1.4-1.4L10.6 12 8.5 9.9l1.4-1.4L12 10.6l2.1-2.1 1.4 1.4L13.4 12l2.1 2.1z"
+              d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
             />
           </svg>
+          <input
+            ref="input"
+            v-model="player.searchQuery"
+            type="text"
+            enterkeyhint="search"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="歌手、歌曲或专辑"
+            class="w-full h-10 pl-10 pr-10 rounded-xl bg-fill text-[16px] lg:text-[15px] text-fg placeholder:text-fg-subtle outline-none focus:bg-fill-strong transition"
+            @keydown.escape="onEscape"
+            @keydown.enter="onEnter"
+            @blur="rememberSearch(player.searchQuery)"
+          />
+          <button
+            v-if="player.searchQuery"
+            class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-fg-subtle hover:text-fg hover:bg-fill-strong transition"
+            title="清空"
+            @click="clearQuery"
+          >
+            <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current">
+              <path
+                d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm3.5 12.1-1.4 1.4L12 13.4l-2.1 2.1-1.4-1.4L10.6 12 8.5 9.9l1.4-1.4L12 10.6l2.1-2.1 1.4 1.4L13.4 12l2.1 2.1z"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <button
+          data-search-cancel
+          class="shrink-0 h-10 px-1 text-[15px] font-medium text-music hover:opacity-70 transition"
+          @click="cancel"
+        >
+          取消
         </button>
       </div>
     </div>
@@ -278,7 +309,33 @@ function onKey(e: KeyboardEvent) {
 
     <!-- ===== 没搜索词：给点可点的入口，不留一整页空白 ===== -->
     <template v-else>
-      <p class="mt-6 text-[14px] text-fg-muted">
+      <!-- 最近搜索：点一条即重搜（并把它提到最前）。做成 chips 而不是列表：
+           一条一行的话，10 条就把下面的「热门歌手」挤出屏幕 -->
+      <section v-if="recentSearches.length" data-recent-searches class="mt-6">
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 class="text-[22px] font-bold tracking-tight">最近搜索</h2>
+          <button
+            data-recent-clear
+            class="text-[14px] text-music hover:opacity-70 transition"
+            @click="clearSearchHistory"
+          >
+            清除
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="q in recentSearches"
+            :key="q"
+            :data-recent-query="q"
+            class="max-w-full h-9 px-3.5 rounded-full bg-fill hover:bg-fill-strong transition text-[14px] text-fg truncate"
+            @click="rerun(q)"
+          >
+            {{ q }}
+          </button>
+        </div>
+      </section>
+
+      <p class="mt-7 text-[14px] text-fg-muted">
         搜索曲库里的歌手、歌曲或专辑。<br />
         支持一次输入多个词（如「周杰伦 稻香」），也支持简体写法搜繁体曲目。
       </p>
