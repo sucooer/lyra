@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePlayerStore } from '../stores/player'
-import { activeView, openAlbums, openArtists, openPlaylist } from '../lib/nav'
+import { activeView, openAlbums, openArtists } from '../lib/nav'
 import { buildAlbumIndex, buildArtistIndex } from '../lib/search'
 
 /**
- * 顶栏的「资料库」入口：点开是一个面板，里面是歌手 / 专辑两个索引页 + 歌单快捷跳转。
+ * 顶栏的「资料库」入口：点开是一个面板，里面只放**没有别的入口**的两个维度
+ * （全部歌手 / 全部专辑），点进去是索引页。
  *
- * 为什么做在顶栏弹层而不是常驻侧边栏：侧边栏要重排整个外壳（悬浮顶栏、视口居中的
- * 播放胶囊、各视图的 lg 内边距都得跟着重算，1024px 档网格还会掉一列），而真正缺的是
+ * 刻意**不在这里列歌单**：那是「抄一份清单」的思路，歌单一多就必然崩（放不下、也没法维护
+ * 顺序）。面板只放「结构性的入口」，清单类的东西一律各自有页面 —— 歌单在首页就够了；
+ * 哪天真多到首页摆不下，就再加一个 `#/playlists` 索引页，那时这里加**一行**入口即可，
+ * 而不是往面板里塞列表。
+ *
+ * 为什么做弹层而不是常驻侧边栏：侧边栏要重排整个外壳（悬浮顶栏、视口居中的播放胶囊、
+ * 各视图的 lg 内边距都得跟着重算，1024px 档网格还会掉一列），而真正缺的是
  * 「歌手 / 专辑没有列表入口」这件事 —— 先用最轻的入口把它补上，确认自己真的会顺着逛，
  * 再决定要不要把它挪进常驻侧栏。
  */
@@ -28,9 +34,6 @@ const indexes = computed(() =>
     ? { artists: buildArtistIndex(player.tracks), albums: buildAlbumIndex(player.tracks) }
     : null,
 )
-const playlistCount = computed(() => player.playlistCards.length)
-const libraryCount = computed(() => player.collections.length)
-const collections = computed(() => player.collections)
 
 function toggle() {
   open.value = !open.value
@@ -115,24 +118,6 @@ watch(activeView, () => (open.value = false))
             <span class="block text-[12px] text-fg-muted truncate">年份新的在前</span>
           </span>
         </button>
-
-        <div v-if="playlistCount" class="mt-1 pt-2 border-t border-line">
-          <div class="px-3 pb-1 text-[12px] font-medium text-fg-subtle">
-            歌单<template v-if="libraryCount > playlistCount"> · 含全部歌曲</template>
-          </div>
-          <button
-            v-for="c in collections"
-            :key="c.def.id"
-            :data-library-playlist="c.def.id"
-            class="w-full px-3 py-2 rounded-xl hover:bg-fill transition text-left"
-            @click="choose(() => openPlaylist(c.def.id))"
-          >
-            <span class="block text-[14px] truncate">{{ c.def.title }}</span>
-            <span v-if="c.def.subtitle" class="block text-[12px] text-fg-muted truncate">
-              {{ c.def.subtitle }}
-            </span>
-          </button>
-        </div>
       </div>
     </Transition>
   </div>
