@@ -636,6 +636,14 @@ const results = await mapPool(todo, JOBS, async (a) => {
       info.bioVersion = BIO_VERSION
     } else {
       diag = bio?.diag ?? ''
+      // 重抓没抓到就清掉旧值：wantBio 成立说明旧值要么本来没有、要么按当前规则
+      // 已作废 —— 不清的话会把「上次误抓的错简介」一直留在页面上（とた 撞上假名
+      // 音节词条那次）。不记 bioVersion，下次运行还会再试（万一 Last.fm 或新词条
+      // 后来能补上）。代价：网络抖动导致「明明有简介却这轮没抓到」时会暂时清空，
+      // 下一轮自愈；宁可缺也比摆着错的强。
+      info.bio = undefined
+      info.bioSource = undefined
+      info.bioUrl = undefined
     }
   }
 
