@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { artistKey } from './artists'
 
@@ -58,6 +58,33 @@ interface LyraState {
   depth: number
   view: ViewRef
   nowPlaying: boolean
+  /**
+   * 离开这一层时滚动容器的位置。滚动容器是全局唯一的 `main`，所有层共用 ——
+   * 不记下来的话，从首页滚到中段点进歌手页，歌手页会沿用这个残留位置
+   * （表现为页面打开在半截），返回首页时又会停在歌手页滚到的位置。
+   */
+  scroll?: number
+}
+
+/** 滚动容器：App 布局里唯一 overflow-y-auto 的 main（各视图共用） */
+function mainEl(): HTMLElement | null {
+  return document.querySelector('main')
+}
+
+/** 把当前滚动位置写进「正在离开的」这条历史记录。必须在 push/back 之前调用 */
+function saveScroll() {
+  const s = stateOf()
+  const el = mainEl()
+  if (s && el) replaceWith({ ...s, scroll: Math.round(el.scrollTop) })
+}
+
+/**
+ * 把滚动容器恢复到某条记录记下的位置。
+ * 必须等 Vue 把新视图挂载完（nextTick）再设：提前设会被随后到来的
+ * 内容替换吞掉，挂载后设才能落在真正的目标内容上。
+ */
+function restoreScroll(state: LyraState) {
+  void nextTick(() => mainEl()?.scrollTo({ top: state.scroll ?? 0 }))
 }
 
 function stateOf(): LyraState | null {
@@ -103,6 +130,7 @@ let goingBack = false
 function back() {
   if (goingBack) return
   goingBack = true
+  saveScroll() // 把当前层的位置记下来，返回键再回到这层时才能恢复
   history.back()
   // 兜底：万一 popstate 没来（历史被别的逻辑吃掉），别把返回按钮锁死
   setTimeout(() => (goingBack = false), 600)
@@ -153,6 +181,7 @@ function replaceWith(state: LyraState) {
 function apply(state: LyraState) {
   activeView.value = state.view
   usePlayerStore().showNowPlaying = state.nowPlaying
+  restoreScroll(state)
 }
 
 /** 挂载时调用一次：首屏记录打标记，并接管 popstate（含侧滑返回） */
@@ -174,6 +203,7 @@ export function initNav() {
     replace(v, false)
     activeView.value = v
     usePlayerStore().showNowPlaying = false
+    restoreScroll({ lyra: true, depth: 0, view: plain(v), nowPlaying: false })
   })
 }
 
@@ -189,9 +219,12 @@ function open(view: ViewRef) {
    * 于是后退正好回到刚才的播放页：和别的层一样，一层退一次。
    */
   const modal = player.showNowPlaying
+  saveScroll() // 离开当前层前把它的滚动位置记进这条记录，返回时恢复
   push(view, false)
   activeView.value = view
   if (modal) player.showNowPlaying = false
+  // 新的一层从顶部开始：滚动容器是共用的，不清零就会沿用上一层的残留位置
+  restoreScroll({ lyra: true, depth: 0, view: plain(view), nowPlaying: false })
 }
 
 export function openPlaylist(id: string) {
@@ -226,6 +259,7 @@ export function openSearch() {
     replace(search, false)
     activeView.value = { ...search }
     player.showNowPlaying = false
+    restoreScroll({ lyra: true, depth: 0, view: plain(search), nowPlaying: false })
   } else if (activeView.value.kind !== 'search') {
     open(search)
   }
@@ -243,11 +277,13 @@ export function goHome() {
   // 深链直接打开的子页面：没有上一层，就地改写成首页
   replace(HOME, false)
   activeView.value = { ...HOME }
+  restoreScroll({ lyra: true, depth: 0, view: plain(HOME), nowPlaying: false })
 }
 
 export function openNowPlaying() {
   const player = usePlayerStore()
   if (player.showNowPlaying) return
+  saveScroll() // 播放页盖在上面不动底下的滚动，但关掉时要能回到原位置
   push(activeView.value, true)
   player.showNowPlaying = true
 }
