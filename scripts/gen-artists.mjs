@@ -67,9 +67,15 @@ const JOBS = 2
 const UA = 'lyra-metadata/1.0 (https://github.com/sucooer/lyra)'
 /** 同一主机的两次请求至少隔这么久；顺带压一压被第三方风控（406）的概率 */
 const MIN_GAP = 250
+/**
+ * 有些站点有明确的速率要求。MusicBrainz 是「≤1 次/秒」，250ms 会被它判为滥用，
+ * 而兜底路径一旦被封就等于没有兜底。
+ */
+const SLOW_HOSTS = new Set(['musicbrainz.org'])
 const lastAt = new Map()
 async function throttle(host) {
-  const wait = (lastAt.get(host) ?? 0) + MIN_GAP - Date.now()
+  const gap = SLOW_HOSTS.has(host) ? 1100 : MIN_GAP
+  const wait = (lastAt.get(host) ?? 0) + gap - Date.now()
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
   lastAt.set(host, Date.now())
 }
@@ -409,20 +415,70 @@ function clipBio(s) {
   return `${(cut > BIO_MAX * 0.5 ? head.slice(0, cut + 1) : head).trim()}…`
 }
 
+/**
+ * 拿一个名字把 Last.fm 与四个语种的维基都试一遍，命中即返回。
+ * 索引数据源的共同点是**按名字查** —— 名字写法不对就什么都查不到。
+ */
+async function lookupByName(name, diag) {
+  if (LASTFM_KEY) {
+    const lf = (await lastfmBio(name, 'zh')) ?? (await lastfmBio(name, 'en'))
+    if (lf) return { ...lf, source: 'lastfm' }
+    diag.push('lastfm 无')
+  }
+  for (const lang of ['zh', 'ja', 'ko', 'en']) {
+    const w = await wikiBio(name, lang)
+    if (w?.bio) return { ...w, source: `wikipedia-${lang}` }
+    if (w?.diag) diag.push(w.diag)
+  }
+  return null
+}
+
+/**
+ * MusicBrainz 原名解析（兜底）。
+ *
+ * 曲库里的歌手名常常是罗马音或简体中译（Makiko Hirohashi / 矶村由纪子），
+ * 而 Last.fm 与维基用的是当地写法（広橋真紀子 / 磯村由紀子）—— 名字对不上，
+ * 两个源都查不到东西，看起来像「这个人没有资料」，其实只是没问对人。
+ * MB 本身不提供简介，但它知道「这是同一个人」，会给出规范名与别名。
+ *
+ * 只取 score ≥ 90 的候选，避免把同名艺人安错；MB 限 1 次/秒（见 SLOW_HOSTS）。
+ */
+async function musicbrainzNames(name) {
+  const j = await get(
+    `https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(name)}&fmt=json&limit=3`,
+    { as: 'json', quiet: true },
+  )
+  const out = []
+  for (const a of j?.artists ?? []) {
+    if ((a.score ?? 0) < 90) continue
+    for (const n of [a.name, ...(a.aliases ?? []).map((x) => x.name)]) {
+      if (typeof n === 'string' && n.trim()) out.push(n.trim())
+    }
+    if (out.length >= 4) break
+  }
+  return [...new Set(out)]
+}
+
 async function fetchBio(name) {
   if (NOT_A_PERSON.has(normName(name))) return null
   const diag = []
-  let r = null
-  if (LASTFM_KEY) {
-    r = (await lastfmBio(name, 'zh')) ?? (await lastfmBio(name, 'en'))
-    if (r) r = { ...r, source: 'lastfm' }
-    else diag.push('lastfm 无')
-  }
-  for (const lang of ['zh', 'ja', 'ko', 'en']) {
-    if (r) break
-    const w = await wikiBio(name, lang)
-    if (w?.bio) r = { ...w, source: `wikipedia-${lang}` }
-    else if (w?.diag) diag.push(w.diag)
+  // 先按曲库原名查
+  let r = await lookupByName(name, diag)
+  if (!r) {
+    // 全落空 → 问一次 MB 要同一人的其它写法，整轮重试（Last.fm 与维基都跟着受益）
+    const alt = await musicbrainzNames(name)
+    // ⚠️ 去重只能按**原字符串**，不能按 simplify：Last.fm 与维基是按字面名字索引的，
+    // 「矶村由纪子」（曲库）与「磯村由紀子」（MB 规范名）在 simplify 眼里是同一个人，
+    // 但对服务端是两个不同的键 —— 按 simplify 去重会把唯一能查到的那个名字跳掉。
+    const seen = new Set([name.trim()])
+    for (const n of alt) {
+      if (seen.has(n)) continue
+      seen.add(n)
+      const d2 = []
+      r = await lookupByName(n, d2)
+      if (r) break
+    }
+    if (!r && alt.length) diag.push(`mb:${alt.slice(0, 3).join('|')}`)
   }
   // 没抓到就把原因带回去，日志里能看出是「真没条目」还是「被拦」
   if (!r) return { diag: diag.join(' ') }
