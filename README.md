@@ -9,7 +9,7 @@
 - 📻 **电台**：一键把资料库全部歌曲乱序无限播放；封面每次点播程序化随机生成
 - 💽 **歌单卡片**：`public/playlists.json` 自定义歌单（按歌手/专辑/曲名筛选），首页推荐区卡片式展示，封面自动取成员专辑封面拼贴
 - 🌅 **每日推荐**：按日期从曲库轮换出一份当天歌单，排在推荐区第一位；由 GitHub Actions 每天定时生成（cron），不跑也不会空着
-- 🎛️ **Emby 音乐库**：`pnpm emby` 直接把一台 Emby 服务器上的音乐库同步进曲库（907 首约 4 秒），元数据与封面取自 Emby；播放经本站端点中转，密钥不出服务端
+- 🎛️ **Emby 音乐库**：`pnpm emby` 直接把一台 Emby 服务器上的音乐库同步进曲库（1.28 万首几秒），元数据取自 Emby；播放 / 封面 / 歌词都经本站端点中转，密钥不出服务端
 - 🔎 **搜索**：歌手 / 专辑 / 歌曲 / 歌单四类结果，入口在顶栏（快捷键 `/` 或 `⌘K`）。匹配前先归一化，所以写法差异不影响结果——「張韶涵」搜得到「张韶涵」、`sens` 搜得到 S.E.N.S.；多词按 AND 处理，「周杰伦 稻香」直接定位那一首
 - 🏷️ **元数据解析**：浏览器端用 `music-metadata` v11 解析内嵌封面、标题、歌手、专辑、歌词（ID3v2 / Vorbis Comment / MP4 atom）
 - ⚡ **预解析缓存**：构建时生成 `public/meta.json` + `public/covers/` + `public/lyrics/`，首页直接渲染、不再联网解析。这三项产物**随仓库提交**——`meta.json` 本身就是解析缓存，入库后部署构建能直接命中，不必每次重新下载解析整个曲库
@@ -226,49 +226,68 @@ Secrets and variables → Actions 里加 `AI_API_KEY`，`AI_BASE_URL` / `AI_MODE
 于是它们自动出现在电台、每日推荐和 `playlists.json` 的歌单规则里。
 
 **为什么不用解析**：Emby 已经把库索引好了，一次 `Items` 查询就带回标题 / 艺术家 /
-专辑 / 年份 / 轨号 / 时长 / 码率 / 采样率，封面也有现成接口。实测 907 首 **4.3 秒**
+专辑 / 年份 / 轨号 / 时长 / 码率 / 采样率，封面也有现成接口。实测全库 **几秒内**
 完成；同规模若走 `pnpm meta` 的「下载音频分块解析」，要跑约半小时、并经 Emby
-再拉 1.8GB 流量。代价是**拿不到歌词** —— 实测库里所有曲目内嵌歌词都是 0 条，
-Emby 也没有可用的歌词端点。纯音乐库不受影响。
+再拉 1.8GB 流量。
 
 ```bash
 cp .env.example .env.local   # 填 EMBY_URL 与 EMBY_API_KEY
-pnpm emby                    # 生成 public/emby.json 与封面
+pnpm emby                    # 生成 public/emby.json
 pnpm emby --dry              # 只打印不落盘
 pnpm emby --limit 30         # 试跑
 ```
 
 **自动同步要把密钥放进仓库 secret**：Settings → Secrets and variables → Actions →
 New repository secret，加 `EMBY_URL` 与 `EMBY_API_KEY`。配好之后每天 00:05 的工作流会
-同步新歌、新封面与新歌词并提交；也可以在 Actions → 曲库与每日推荐 → Run workflow 立刻跑一次。
+同步新歌与新歌单并提交；也可以在 Actions → 曲库与每日推荐 → Run workflow 立刻跑一次。
 **没配的话工作流不会失败，只是静默跳过** —— 表现是线上曲库一直停在仓库快照里的那批歌
 （运行日志里会有黄字提醒）。⚠️ 部署构建**不**做同步（CF Pages 构建有 20 分钟上限，
-4700 首全量同步随时会超时，而且产物不进仓库就无法复现），这条路已经废弃。
+而且产物不进仓库就无法复现），这条路已经废弃。
 
 密钥在 Emby 后台 → 设置 → 高级 → API 密钥 新建。⚠️ 它**不是只读音乐库的凭证，
 而是整台服务器的完整权限**（含其它媒体库与管理接口），因此只能待在服务端：
 本地放 `.env.local`（`.gitignore` 已排除），线上放 CF Pages / Vercel 的环境变量。
 没配也能正常构建 —— 脚本会跳过，直接用仓库里已提交的快照。
 
-### 播放为什么要中转
+### 播放、封面与歌词为什么都走中转
 
 Emby 取流必须带 `api_key`，而站点是 https、Emby 通常只有 http。两者叠加使得
 **前端不可能直连**：密钥写进 `emby.json` 等于公开给所有访问者，而 http 媒体在
 https 页面里会被混合内容策略拦掉。
 
-所以 `emby.json` 里存的不是音频地址，而是本站端点 `/api/emby/stream?id=<条目 id>`，
-密钥由服务端注入（`functions/api/emby/stream.js` / `api/emby/stream.js`，两份逻辑等价）。
-`pnpm dev` 下由 `vite.config.ts` 的中间件复用同一个处理器，不另写一套 ——
-免得开发期和生产期恰好在「密钥怎么注入」这件事上漂移。
+所以 `emby.json` 里存的不是资源的真实地址，而是三个本站端点：
+
+| 用途 | 端点 | 说明 |
+|---|---|---|
+| 播放 | `/api/emby/stream?id=<条目 id>` | 原样透传音频，支持 Range |
+| 封面 | `/api/emby/cover?id=<专辑 id>` | 现取 `Images/Primary`，浏览器/边缘缓存一天 |
+| 歌词 | `/api/emby/lyrics?id=<条目 id>` | Range 拉音频头部，解析内嵌歌词（FLAC / MP3 / M4A）返回 |
+
+密钥由服务端注入（`functions/api/emby/*` 与 `api/emby/*` 两份逻辑等价，分别对应
+CF Pages 与 Vercel）。`pnpm dev` 下由 `vite.config.ts` 的中间件复用同一份 CF 处理器，
+不另写一套 —— 免得开发期和生产期恰好在「密钥怎么注入」这件事上漂移。
 
 ### 产物
 
-`public/emby.json`（约 245KB / 907 首）+ `public/emby-covers/`（约 4.5MB / 58 张），
-**两者都要入库**：构建环境通常没有密钥，靠的就是仓库里这份快照。
+只有 `public/emby.json`（约 3.5MB / 1.28 万首）入库，构建环境通常没有密钥，
+靠的就是仓库里这份快照。
 
-封面按专辑去重，文件名取图片内容的 sha1 前 12 位（与 `covers/` 同一套约定），
-刻意放在**单独目录** —— `gen-meta` 会清理 `public/covers/` 里未被 `meta.json`
-引用的文件，放进去会被当孤儿删掉。
+**封面与歌词不落盘、不进 git**。早先版本会把封面下载进 `public/emby-covers/`、
+歌词逐首解析成 `public/emby-lyrics/` 一并提交，曲库一大就是上千张图加上万份歌词
+（一百多 MB）堆在仓库里，clone / CI checkout / 部署全被拖慢。改成走上面两个代理端点后，
+这两个目录整个从仓库消失，`emby.json` 里只写端点地址。代价是 **Emby 不在线时
+封面与歌词不可用**（元数据照常，因为它在 `emby.json` 里）。
+
+歌词端点的解析器在 `functions/_lib/audio-lyrics.js`（CF 与 Vercel 共用同一份），
+按魔数识别三种容器并各走一套轻量解析：FLAC 读 Vorbis Comment 的 `LYRICS` 字段，
+MP3 读 ID3v2 的 `SYLT` / `USLT` / `TXXX:LYRICS` 帧，M4A 读 `moov.udta.meta.ilst`
+里的 `©lyr`。刻意不引 `music-metadata`：CF Pages Function 跑在 V8 isolates（非 Node），
+加载不动它。MP3 的 ID3 标签若比头部 128KB 大（内嵌封面把歌词挤到后面）会按声明的
+标签大小补拉一次；M4A 的 moov 不在头部范围内时会补拉——实测遇到过两种形态：
+moov 声明 139KB 被 128KB 头部截断（ilst 里 124KB 的封面把 ©lyr 挤到后面），
+按 moov 的声明范围补拉整段；moov 整个在文件尾（非 faststart）则补拉尾部 512KB。
+两种真实文件（UTF-8 中文 MP3、带 41 行同步歌词的 M4A）已实测与 `music-metadata`
+逐行一致。
 
 ## 同步听歌记录到 Last.fm
 

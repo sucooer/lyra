@@ -157,7 +157,11 @@ jobs:
           # 才会进下一次构建，也才会进入之后的选歌池。playlist.json 一并提交是因为
           # 上一步把歌名回填进去了。
           git add public/playlist.json public/meta.json public/covers public/lyrics \
-                  public/daily.json public/emby.json public/emby-covers public/emby-lyrics public/artists.json
+                  public/daily.json public/emby.json public/artists.json
+          # Emby 的封面/歌词已改为走代理（/api/emby/cover、/api/emby/lyrics），不再落盘进
+          # 仓库。这两个旧目录可能还存在于历史里：用 add -A 把它们的删除也一并提交；
+          # 目录已不存在时 git add 会报错，故加 || true 兜底。
+          git add -A public/emby-covers public/emby-lyrics 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "产物与上次一致（没有新歌、日期也没变），跳过提交"
             exit 0

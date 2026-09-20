@@ -15,6 +15,8 @@ import tailwindcss from '@tailwindcss/vite'
  */
 const DEV_ROUTES: Record<string, string> = {
   '/api/emby/stream': 'functions/api/emby/stream.js',
+  '/api/emby/cover': 'functions/api/emby/cover.js',
+  '/api/emby/lyrics': 'functions/api/emby/lyrics.js',
   '/api/proxy': 'functions/api/proxy.js',
   '/api/lastfm': 'functions/api/lastfm.js',
   '/api/lastfm/auth': 'functions/api/lastfm/auth.js',

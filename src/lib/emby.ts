@@ -15,6 +15,8 @@ import type { CachedMeta } from './metadata'
 import type { PlaylistDef } from './playlists'
 
 export const EMBY_STREAM_PATH = '/api/emby/stream'
+export const EMBY_COVER_PATH = '/api/emby/cover'
+export const EMBY_LYRICS_PATH = '/api/emby/lyrics'
 
 /**
  * Emby 歌单并入本站歌单时统一加这个前缀。
@@ -40,19 +42,6 @@ export function embyPlaylistSubtitle(count: number, seconds: number): string {
 /** 与 meta.json 同形的生成产物，键就是上面那种直链 */
 export const EMBY_META_URL = '/emby.json'
 
-/**
- * 封面单独放一个目录。
- * 不能塞进 public/covers/ —— gen-meta 会清理该目录里「未被 meta.json 引用」的文件，
- * 而 Emby 的封面只被 emby.json 引用，跑一次 pnpm meta 就会被全部删掉。
- */
-export const EMBY_COVER_DIR = '/emby-covers'
-
-/**
- * 歌词单独放一个目录，理由与封面相同：gen-meta 会清理 public/lyrics/ 里
- * 「未被 meta.json 引用」的文件，而 Emby 的歌词只被 emby.json 引用。
- */
-export const EMBY_LYRIC_DIR = '/emby-lyrics'
-
 /** Emby 条目 → 本站在播放器里使用的直链 */
 export function embyStreamUrl(id: string): string {
   return `${EMBY_STREAM_PATH}?id=${encodeURIComponent(id)}`
@@ -61,6 +50,31 @@ export function embyStreamUrl(id: string): string {
 /** 判断某条直链是否走 Emby 取流端点 */
 export function isEmbyStreamUrl(url: string): boolean {
   return url.startsWith(`${EMBY_STREAM_PATH}?id=`)
+}
+
+/**
+ * 专辑封面 → 本站封面代理端点。
+ * 封面不再随仓库提交（原来 1400+ 张、一百多 MB 全堆在 git 里），
+ * 改成用到时由服务端去 Emby 现取并透传，密钥同样不出服务端。
+ * id 用「封面归属条目」——专辑 id（无专辑时退回曲目父目录 id），
+ * 与同专辑多首曲目共用同一张封面一致。
+ */
+export function embyCoverUrl(ownerId: string): string {
+  return `${EMBY_COVER_PATH}?id=${encodeURIComponent(ownerId)}`
+}
+
+/** 判断某个封面地址是否走本站 Emby 封面代理 */
+export function isEmbyCoverUrl(url: string): boolean {
+  return url.startsWith(`${EMBY_COVER_PATH}?id=`)
+}
+
+/**
+ * 曲目歌词 → 本站歌词端点。
+ * 歌词也不再随仓库提交（原来一歌一份 json、上万份），
+ * 由服务端 Range 拉音频头部解析 SYLT 后按需返回。
+ */
+export function embyLyricsUrl(id: string): string {
+  return `${EMBY_LYRICS_PATH}?id=${encodeURIComponent(id)}`
 }
 
 export interface EmbyFile {
