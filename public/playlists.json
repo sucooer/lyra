@@ -18,6 +18,18 @@
     "artists": ["ヨルシカ"]
   },
   {
+    "id": "yoasobi",
+    "title": "把小说唱成歌",
+    "subtitle": "YOASOBI · 小说化作音乐",
+    "artists": ["YOASOBI"]
+  },
+  {
+    "id": "fishleong",
+    "title": "勇气与情歌",
+    "subtitle": "梁静茹 · 温柔的声音",
+    "artists": ["梁静茹"]
+  },
+  {
     "id": "jpop",
     "title": "日系小清新",
     "subtitle": "你可能喜欢的歌单",
