@@ -1,11 +1,11 @@
 {
   "date": "2026-09-20",
-  "generatedAt": "2026-09-20T06:16:22.745Z",
+  "generatedAt": "2026-09-20T06:21:10.770Z",
   "count": 30,
   "title": "每日推荐",
   "subtitle": "9月20日 · 30 首 · 每天更新",
-  "blurb": "从 1985 到 2025，横跨 40 年。fripSide 一个人就占了 3 首。其中 12 首是日语歌。",
-  "blurbFrom": "template",
+  "blurb": "光る雲移过屋脊，柴田淳把朝靄唱给午夜。Humbert Humbert 让 1 時間在雨里慢慢走，冈村孝子点亮 1985 年的ピエロ。fripSide 与薛凯琪遥遥相望，像一声叹息。它们各自待在原处，却凑成同一阵夜风。",
+  "blurbFrom": "ai",
   "urls": [
     "/api/emby/stream?id=8262",
     "/api/emby/stream?id=4436",
