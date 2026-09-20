@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T00:05:44.546Z",
+  "generatedAt": "2026-09-20T06:15:16.889Z",
   "tracks": {
     "https://img.520717.xyz/file/1789471325044_02._%E7%B2%89%E9%9B%AA.flac": {
       "title": "粉雪",
@@ -238,6 +238,20 @@
       "sampleRate": 44100,
       "cover": "/covers/bffe8d288fce.jpg",
       "lyricsUrl": "/lyrics/5e977f35c8c9.json"
+    },
+    "https://img.520717.xyz/file/music/f2WK35FG.mp3": {
+      "title": "把耳朵叫醒",
+      "artist": "金海心",
+      "album": "把耳朵叫醒",
+      "albumArtist": "金海心",
+      "year": 1999,
+      "trackNo": 1,
+      "duration": 210.80816326530612,
+      "codec": "MPEG 1 Layer 3",
+      "bitrate": 326,
+      "sampleRate": 44100,
+      "cover": "/covers/55318dd795e6.jpg",
+      "lyricsUrl": "/lyrics/596a3059a4be.json"
     }
   }
 }
