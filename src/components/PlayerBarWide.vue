@@ -24,7 +24,8 @@ function toggleMute() {
 function volumeRatioFrom(e: PointerEvent): number {
   const el = e.currentTarget as HTMLElement
   const r = el.getBoundingClientRect()
-  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+  // 竖向轨道：顶部=1，底部=0
+  return Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height))
 }
 const volumeDragging = ref(false)
 function onVolumeDown(e: PointerEvent) {
@@ -250,7 +251,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <!-- ============ 右：队列 + 音量 ============ -->
         <div class="flex items-center justify-end gap-2">
           <button
-            class="relative z-10 w-8 h-8 rounded-full flex items-center justify-center transition"
+            class="w-8 h-8 rounded-full flex items-center justify-center transition"
             :class="queueOpen ? 'text-music' : 'text-fg-muted hover:text-fg'"
             title="播放队列"
             @click="queueOpen = !queueOpen"
@@ -276,20 +277,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             </button>
 
             <div
-              class="absolute right-full top-1/2 -translate-y-1/2 pr-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
+              class="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity"
             >
               <div
-                class="w-[84px] h-[14px] flex items-center cursor-pointer touch-none select-none"
+                class="w-6 h-[96px] flex justify-center cursor-pointer touch-none select-none"
                 @pointerdown="onVolumeDown"
                 @pointermove="onVolumeMove"
                 @pointerup="onVolumeUp"
                 @pointercancel="onVolumeUp"
               >
-                <div class="relative w-full h-[3px] rounded-full bg-track">
-                  <div class="h-full rounded-full bg-fg" :style="{ width: player.volume * 100 + '%' }"></div>
+                <div class="relative w-[3px] h-full rounded-full bg-track">
+                  <div class="absolute bottom-0 w-full rounded-full bg-fg" :style="{ height: player.volume * 100 + '%' }"></div>
                   <span
-                    class="absolute top-1/2 -translate-y-1/2 -ml-[5px] w-[9px] h-[9px] rounded-full bg-fg"
-                    :style="{ left: player.volume * 100 + '%' }"
+                    class="absolute left-1/2 -ml-[4.5px] w-[9px] h-[9px] rounded-full bg-fg"
+                    :style="{ bottom: `calc(${player.volume * 100}% - 4.5px)` }"
                   ></span>
                 </div>
               </div>
