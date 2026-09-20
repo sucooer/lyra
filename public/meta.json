@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-20T06:15:16.889Z",
+  "generatedAt": "2026-09-20T06:32:28.238Z",
   "tracks": {
     "https://img.520717.xyz/file/1789471325044_02._%E7%B2%89%E9%9B%AA.flac": {
       "title": "粉雪",
@@ -252,6 +252,34 @@
       "sampleRate": 44100,
       "cover": "/covers/55318dd795e6.jpg",
       "lyricsUrl": "/lyrics/596a3059a4be.json"
+    },
+    "https://img.520717.xyz/file/music/wm3mKlTF.flac": {
+      "title": "阳光下的星星",
+      "artist": "金海心",
+      "album": "独立日",
+      "albumArtist": "金海心",
+      "year": 2006,
+      "trackNo": 1,
+      "duration": 283.52,
+      "codec": "FLAC",
+      "bitrate": 805,
+      "sampleRate": 44100,
+      "cover": "/covers/136957295975.jpg",
+      "lyricsUrl": "/lyrics/a7b9559c7450.json"
+    },
+    "https://img.520717.xyz/file/music/3PLzOtKD.flac": {
+      "title": "爱似水仙",
+      "artist": "金海心",
+      "album": "爱似水仙 - EP",
+      "albumArtist": "金海心",
+      "year": 2008,
+      "trackNo": 1,
+      "duration": 245.48,
+      "codec": "FLAC",
+      "bitrate": 904,
+      "sampleRate": 44100,
+      "cover": "/covers/9289ef4bb6c6.jpg",
+      "lyricsUrl": "/lyrics/d9de67475696.json"
     }
   }
 }

@@ -16,6 +16,6 @@
   { "url": "https://img.520717.xyz/file/music/qe58P3Mz.flac", "title": "小さな恋のうた", "artist": "高木さん(CV:高橋李依)" },
   { "url": "https://img.520717.xyz/file/music/UfGRWtGq.flac", "title": "愛唄", "artist": "高木さん(CV:高橋李依)" },
   { "url": "https://img.520717.xyz/file/music/f2WK35FG.mp3", "title": "把耳朵叫醒", "artist": "金海心" },
-  "https://img.520717.xyz/file/music/wm3mKlTF.flac",
-  "https://img.520717.xyz/file/music/3PLzOtKD.flac"
+  { "url": "https://img.520717.xyz/file/music/wm3mKlTF.flac", "title": "阳光下的星星", "artist": "金海心" },
+  { "url": "https://img.520717.xyz/file/music/3PLzOtKD.flac", "title": "爱似水仙", "artist": "金海心" }
 ]
