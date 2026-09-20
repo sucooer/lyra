@@ -250,7 +250,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <!-- ============ 右：队列 + 音量 ============ -->
         <div class="flex items-center justify-end gap-2">
           <button
-            class="w-8 h-8 rounded-full flex items-center justify-center transition"
+            class="relative z-10 w-8 h-8 rounded-full flex items-center justify-center transition"
             :class="queueOpen ? 'text-music' : 'text-fg-muted hover:text-fg'"
             title="播放队列"
             @click="queueOpen = !queueOpen"
