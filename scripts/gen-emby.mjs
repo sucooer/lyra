@@ -89,10 +89,42 @@ const env = loadEnv()
 const BASE = (env.EMBY_URL || '').replace(/\/+$/, '')
 const KEY = env.EMBY_API_KEY || ''
 
-const api = async (p, extra = '') => {
-  const r = await fetch(`${BASE}/emby${p}?api_key=${encodeURIComponent(KEY)}${extra}`)
-  if (!r.ok) throw new Error(`Emby ${p} → HTTP ${r.status}`)
-  return r.json()
+/**
+ * 服务器前面挂着按 UA / 频率的防护（实测 curl / Emby 这类 UA 会拿到 SPA 的
+ * HTML 回退页，Mozilla 或无 UA 放行；拦截还有随机性，偶发直接断连）。
+ * CI 上一天一次基本不会触发，本地手动高频跑就容易被盯上。
+ * 对策：带常规浏览器 UA；拿到 HTML（<!DOCTYPE 开头）或连接失败时小退避重试。
+ */
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+
+const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))
+
+async function api(p, extra = '') {
+  for (let attempt = 1; ; attempt++) {
+    let r
+    try {
+      r = await fetch(`${BASE}/emby${p}?api_key=${encodeURIComponent(KEY)}${extra}`, {
+        headers: { 'User-Agent': UA },
+      })
+    } catch (e) {
+      if (attempt >= 3) throw new Error(`Emby ${p} → 连接失败（${e.cause?.code ?? e.message}）`)
+      await sleep(800 * attempt)
+      continue
+    }
+    if (!r.ok) throw new Error(`Emby ${p} → HTTP ${r.status}`)
+    const text = await r.text()
+    if (text.startsWith('<')) {
+      if (attempt >= 3) throw new Error(`Emby ${p} → 返回 HTML（被服务器防护拦截，已重试 3 次）`)
+      await sleep(800 * attempt)
+      continue
+    }
+    try {
+      return JSON.parse(text)
+    } catch {
+      if (attempt >= 3) throw new Error(`Emby ${p} → 响应不是 JSON`)
+      await sleep(800 * attempt)
+    }
+  }
 }
 
 /** 分页取全量。TotalRecordCount 不可信时靠「某页返回空」收尾 */
@@ -138,6 +170,39 @@ function fromPath(p) {
   const artist = parts.length >= 3 ? parts[parts.length - 3] : ''
   const year = Number((album.match(/\((\d{4})\)\s*$/) || [])[1]) || null
   return { album, artist, year, cleanAlbum: album.replace(/\s*\(\d{4}\)\s*$/, '').trim() }
+}
+
+/**
+ * Emby 的「收藏歌曲」→ 一条固定 id 的虚拟歌单。
+ *
+ * 收藏不是 Playlist 条目，而是条目上的 UserData 标记（截图里 Emby 首页的
+ * 「收藏歌曲」就是 Filters=IsFavorite 查询），所以单独查一次。
+ * 不限 ParentId、全库查一遍也没关系：trackUrls 只含音乐库内的曲目，
+ * 不在曲库里的收藏在这里被天然滤掉 —— 与 fetchPlaylists 的 missing 口径一致。
+ * 最新收藏排前面（SortBy=DateCreated），收藏了几首就显示几首。
+ */
+async function fetchFavorites(uid, trackUrls) {
+  const j = await api(
+    `/Users/${uid}/Items`,
+    '&Recursive=true&IncludeItemTypes=Audio&Filters=IsFavorite' +
+      '&SortBy=DateCreated&SortOrder=Descending&Limit=2000',
+  )
+  const urls = []
+  let seconds = 0
+  for (const it of j.Items ?? []) {
+    const u = embyStreamUrl(String(it.Id))
+    if (!trackUrls.has(u)) continue
+    urls.push(u)
+    seconds += (it.RunTimeTicks ?? 0) / 1e7
+  }
+  console.log(`  收藏歌曲：${urls.length} 首`)
+  if (urls.length === 0) return null
+  return {
+    id: 'emby-fav',
+    title: 'Emby 收藏',
+    subtitle: `Emby 收藏 · ${urls.length} 首 · ${Math.max(1, Math.round(seconds / 60))} 分钟`,
+    urls,
+  }
 }
 
 /**
@@ -254,11 +319,19 @@ async function main() {
     }
   }
 
+  const trackUrls = new Set(Object.keys(tracks))
+
+  console.log('Emby 收藏：')
+  const fav = await fetchFavorites(uid, trackUrls)
+
   console.log('Emby 歌单：')
-  const playlists = await fetchPlaylists(uid, new Set(Object.keys(tracks)))
+  const playlists = await fetchPlaylists(uid, trackUrls)
   if (playlists.length === 0) console.log('  （这台 Emby 上没有可用歌单）')
 
-  const fresh = { generatedAt: new Date().toISOString(), tracks, playlists }
+  // 收藏排在最前：它比手动建的歌单更高频被听
+  const allPlaylists = [...(fav ? [fav] : []), ...playlists]
+
+  const fresh = { generatedAt: new Date().toISOString(), tracks, playlists: allPlaylists }
   const body = JSON.stringify(fresh, null, 0) + '\n'
 
   // 内容没变就不重写：generatedAt 每次都不同，不能拿整个文件比对
@@ -268,14 +341,14 @@ async function main() {
       const old = JSON.parse(await readFile(OUT, 'utf8'))
       same =
         JSON.stringify(old.tracks) === JSON.stringify(tracks) &&
-        JSON.stringify(old.playlists ?? []) === JSON.stringify(playlists)
+        JSON.stringify(old.playlists ?? []) === JSON.stringify(allPlaylists)
     } catch {
       /* 旧文件坏了，直接覆盖 */
     }
   }
 
   console.log('')
-  console.log(`曲目 ${Object.keys(tracks).length} 首 | 缺专辑信息 ${noAlbum} 首（已按目录名兜底）| 缺封面 ${noCover} 首 | 歌单 ${playlists.length} 个`)
+  console.log(`曲目 ${Object.keys(tracks).length} 首 | 缺专辑信息 ${noAlbum} 首（已按目录名兜底）| 缺封面 ${noCover} 首 | 歌单 ${allPlaylists.length} 个${fav ? '（含收藏）' : ''}`)
   const samples = picked.slice(0, 3)
   for (const it of samples) {
     const t = tracks[embyStreamUrl(String(it.Id))]
